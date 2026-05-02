@@ -9,38 +9,132 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
+import { Route as DashboardVendorsRouteImport } from './routes/dashboard.vendors'
+import { Route as DashboardStockRouteImport } from './routes/dashboard.stock'
+import { Route as DashboardProjectsRouteImport } from './routes/dashboard.projects'
+import { Route as DashboardFinanceRouteImport } from './routes/dashboard.finance'
+import { Route as DashboardCustomersRouteImport } from './routes/dashboard.customers'
 
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardIndexRoute = DashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardVendorsRoute = DashboardVendorsRouteImport.update({
+  id: '/vendors',
+  path: '/vendors',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardStockRoute = DashboardStockRouteImport.update({
+  id: '/stock',
+  path: '/stock',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardProjectsRoute = DashboardProjectsRouteImport.update({
+  id: '/projects',
+  path: '/projects',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardFinanceRoute = DashboardFinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardCustomersRoute = DashboardCustomersRouteImport.update({
+  id: '/customers',
+  path: '/customers',
+  getParentRoute: () => DashboardRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteWithChildren
+  '/dashboard/customers': typeof DashboardCustomersRoute
+  '/dashboard/finance': typeof DashboardFinanceRoute
+  '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/stock': typeof DashboardStockRoute
+  '/dashboard/vendors': typeof DashboardVendorsRoute
+  '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dashboard/customers': typeof DashboardCustomersRoute
+  '/dashboard/finance': typeof DashboardFinanceRoute
+  '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/stock': typeof DashboardStockRoute
+  '/dashboard/vendors': typeof DashboardVendorsRoute
+  '/dashboard': typeof DashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dashboard': typeof DashboardRouteWithChildren
+  '/dashboard/customers': typeof DashboardCustomersRoute
+  '/dashboard/finance': typeof DashboardFinanceRoute
+  '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/stock': typeof DashboardStockRoute
+  '/dashboard/vendors': typeof DashboardVendorsRoute
+  '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/dashboard/customers'
+    | '/dashboard/finance'
+    | '/dashboard/projects'
+    | '/dashboard/stock'
+    | '/dashboard/vendors'
+    | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/dashboard/customers'
+    | '/dashboard/finance'
+    | '/dashboard/projects'
+    | '/dashboard/stock'
+    | '/dashboard/vendors'
+    | '/dashboard'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/dashboard/customers'
+    | '/dashboard/finance'
+    | '/dashboard/projects'
+    | '/dashboard/stock'
+    | '/dashboard/vendors'
+    | '/dashboard/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DashboardRoute: typeof DashboardRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,21 +142,77 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/': {
+      id: '/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardIndexRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/vendors': {
+      id: '/dashboard/vendors'
+      path: '/vendors'
+      fullPath: '/dashboard/vendors'
+      preLoaderRoute: typeof DashboardVendorsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/stock': {
+      id: '/dashboard/stock'
+      path: '/stock'
+      fullPath: '/dashboard/stock'
+      preLoaderRoute: typeof DashboardStockRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/projects': {
+      id: '/dashboard/projects'
+      path: '/projects'
+      fullPath: '/dashboard/projects'
+      preLoaderRoute: typeof DashboardProjectsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/finance': {
+      id: '/dashboard/finance'
+      path: '/finance'
+      fullPath: '/dashboard/finance'
+      preLoaderRoute: typeof DashboardFinanceRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/customers': {
+      id: '/dashboard/customers'
+      path: '/customers'
+      fullPath: '/dashboard/customers'
+      preLoaderRoute: typeof DashboardCustomersRouteImport
+      parentRoute: typeof DashboardRoute
+    }
   }
 }
 
+interface DashboardRouteChildren {
+  DashboardCustomersRoute: typeof DashboardCustomersRoute
+  DashboardFinanceRoute: typeof DashboardFinanceRoute
+  DashboardProjectsRoute: typeof DashboardProjectsRoute
+  DashboardStockRoute: typeof DashboardStockRoute
+  DashboardVendorsRoute: typeof DashboardVendorsRoute
+  DashboardIndexRoute: typeof DashboardIndexRoute
+}
+
+const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardCustomersRoute: DashboardCustomersRoute,
+  DashboardFinanceRoute: DashboardFinanceRoute,
+  DashboardProjectsRoute: DashboardProjectsRoute,
+  DashboardStockRoute: DashboardStockRoute,
+  DashboardVendorsRoute: DashboardVendorsRoute,
+  DashboardIndexRoute: DashboardIndexRoute,
+}
+
+const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
+  DashboardRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DashboardRoute: DashboardRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
