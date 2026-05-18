@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardVendorsRouteImport } from './routes/dashboard.vendors'
 import { Route as DashboardStockRouteImport } from './routes/dashboard.stock'
+import { Route as DashboardStaffRouteImport } from './routes/dashboard.staff'
 import { Route as DashboardServicesRouteImport } from './routes/dashboard.services'
 import { Route as DashboardProjectsRouteImport } from './routes/dashboard.projects'
 import { Route as DashboardFinanceRouteImport } from './routes/dashboard.finance'
@@ -44,6 +45,11 @@ const DashboardStockRoute = DashboardStockRouteImport.update({
   path: '/stock',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardStaffRoute = DashboardStaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardServicesRoute = DashboardServicesRouteImport.update({
   id: '/services',
   path: '/services',
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/finance': typeof DashboardFinanceRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
   '/dashboard/services': typeof DashboardServicesRoute
+  '/dashboard/staff': typeof DashboardStaffRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/dashboard/finance': typeof DashboardFinanceRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
   '/dashboard/services': typeof DashboardServicesRoute
+  '/dashboard/staff': typeof DashboardStaffRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
   '/dashboard': typeof DashboardIndexRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/dashboard/finance': typeof DashboardFinanceRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
   '/dashboard/services': typeof DashboardServicesRoute
+  '/dashboard/staff': typeof DashboardStaffRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/dashboard/finance'
     | '/dashboard/projects'
     | '/dashboard/services'
+    | '/dashboard/staff'
     | '/dashboard/stock'
     | '/dashboard/vendors'
     | '/dashboard/'
@@ -117,6 +127,7 @@ export interface FileRouteTypes {
     | '/dashboard/finance'
     | '/dashboard/projects'
     | '/dashboard/services'
+    | '/dashboard/staff'
     | '/dashboard/stock'
     | '/dashboard/vendors'
     | '/dashboard'
@@ -128,6 +139,7 @@ export interface FileRouteTypes {
     | '/dashboard/finance'
     | '/dashboard/projects'
     | '/dashboard/services'
+    | '/dashboard/staff'
     | '/dashboard/stock'
     | '/dashboard/vendors'
     | '/dashboard/'
@@ -175,6 +187,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardStockRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/staff': {
+      id: '/dashboard/staff'
+      path: '/staff'
+      fullPath: '/dashboard/staff'
+      preLoaderRoute: typeof DashboardStaffRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/services': {
       id: '/dashboard/services'
       path: '/services'
@@ -211,6 +230,7 @@ interface DashboardRouteChildren {
   DashboardFinanceRoute: typeof DashboardFinanceRoute
   DashboardProjectsRoute: typeof DashboardProjectsRoute
   DashboardServicesRoute: typeof DashboardServicesRoute
+  DashboardStaffRoute: typeof DashboardStaffRoute
   DashboardStockRoute: typeof DashboardStockRoute
   DashboardVendorsRoute: typeof DashboardVendorsRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -221,6 +241,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardFinanceRoute: DashboardFinanceRoute,
   DashboardProjectsRoute: DashboardProjectsRoute,
   DashboardServicesRoute: DashboardServicesRoute,
+  DashboardStaffRoute: DashboardStaffRoute,
   DashboardStockRoute: DashboardStockRoute,
   DashboardVendorsRoute: DashboardVendorsRoute,
   DashboardIndexRoute: DashboardIndexRoute,
