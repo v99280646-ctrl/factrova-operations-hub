@@ -11,6 +11,9 @@ import {
   Bell,
   ChevronDown,
   Factory,
+  Wrench,
+  ShieldCheck,
+  Plug,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
