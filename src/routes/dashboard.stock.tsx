@@ -30,20 +30,28 @@ export const Route = createFileRoute("/dashboard/stock")({
 });
 
 type StockCategory = "materials" | "waste-materials";
+type WasteMaterial = {
+  id: string;
+  material: string;
+  size: string;
+  note: string;
+};
 
 const materialTypes = ["MDF", "Plywood", "Laminate", "Veneer", "Acrylic", "Edge Band", "Hardware"];
 const units = ["sheets", "pieces", "rolls", "kg", "meters", "boxes"];
 
 function Stock() {
   const [list, setList] = useState<StockItem[]>(initial);
-  const [wasteList, setWasteList] = useState<StockItem[]>([
-    { id: "W001", material: "MDF offcuts 18mm", type: "MDF", quantity: 24, unit: "pieces" },
-    { id: "W002", material: "Laminate scrap - Walnut", type: "Laminate", quantity: 18, unit: "pieces" },
-    { id: "W003", material: "Edge band trimming", type: "Edge Band", quantity: 6, unit: "rolls" },
+  const [wasteList, setWasteList] = useState<WasteMaterial[]>([
+    { id: "W001", material: "MDF", size: "18mm offcuts", note: "Reusable for small panels" },
+    { id: "W002", material: "Laminate", size: "Walnut scraps", note: "Keep for edge samples" },
+    { id: "W003", material: "Edge Band", size: "22mm trimming", note: "Short roll balance" },
   ]);
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<StockCategory>("materials");
   const [form, setForm] = useState<StockItem>({ id: "", material: "", type: "", quantity: 0, unit: "sheets" });
+  const [wasteId, setWasteId] = useState("");
+  const [wasteSize, setWasteSize] = useState("");
 
   const add = () => {
     const item = {
@@ -52,7 +60,15 @@ function Stock() {
     };
 
     if (category === "waste-materials") {
-      setWasteList((l) => [...l, { ...item, id: `W${String(l.length + 1).padStart(3, "0")}` }]);
+      setWasteList((l) => [
+        ...l,
+        {
+          id: wasteId.trim() || `W${String(l.length + 1).padStart(3, "0")}`,
+          material: form.type,
+          size: wasteSize,
+          note: "",
+        },
+      ]);
     } else {
       setList((l) => [...l, { ...item, id: `S${String(l.length + 1).padStart(3, "0")}` }]);
     }
@@ -60,6 +76,8 @@ function Stock() {
     setOpen(false);
     setCategory("materials");
     setForm({ id: "", material: "", type: "", quantity: 0, unit: "sheets" });
+    setWasteId("");
+    setWasteSize("");
   };
 
   const adjust = (id: string, delta: number) =>
@@ -101,23 +119,39 @@ function Stock() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1.5">
-                <Label>Quantity</Label>
-                <Input type="number" value={form.quantity || ""} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label>Unit</Label>
-                <Select value={form.unit} onValueChange={(value) => setForm({ ...form, unit: value })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {units.map((unit) => (
-                      <SelectItem key={unit} value={unit}>{unit}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+
+              {category === "waste-materials" ? (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>ID</Label>
+                    <Input value={wasteId} onChange={(e) => setWasteId(e.target.value)} placeholder="e.g. W004" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Size</Label>
+                    <Input value={wasteSize} onChange={(e) => setWasteSize(e.target.value)} placeholder="e.g. 18mm offcuts" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <Label>Quantity</Label>
+                    <Input type="number" value={form.quantity || ""} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label>Unit</Label>
+                    <Select value={form.unit} onValueChange={(value) => setForm({ ...form, unit: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {units.map((unit) => (
+                          <SelectItem key={unit} value={unit}>{unit}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -197,30 +231,24 @@ function Stock() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <th className="px-4 py-3 font-medium">ID</th>
                       <th className="px-4 py-3 font-medium">Material</th>
-                      <th className="px-4 py-3 font-medium">Type</th>
-                      <th className="px-4 py-3 text-right font-medium">Quantity</th>
-                      <th className="px-4 py-3 font-medium">Unit</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 font-medium">Size</th>
+                      <th className="px-4 py-3 font-medium">Note</th>
                     </tr>
                   </thead>
                   <tbody>
                     {wasteList.map((s) => (
                       <tr key={s.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
+                        <td className="px-4 py-3 font-medium">{s.id}</td>
                         <td className="px-4 py-3 font-medium">{s.material}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{s.type}</td>
-                        <td className="px-4 py-3 text-right font-semibold">{s.quantity}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{s.unit}</td>
-                        <td className="px-4 py-3">
-                          <span className="rounded-full border border-warning/30 bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning-foreground">
-                            Waste
-                          </span>
-                        </td>
+                        <td className="px-4 py-3 text-muted-foreground">{s.size}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{s.note || "-"}</td>
                       </tr>
                     ))}
                     {wasteList.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                        <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
                           No waste materials found.
                         </td>
                       </tr>
