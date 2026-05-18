@@ -14,7 +14,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardVendorsRouteImport } from './routes/dashboard.vendors'
 import { Route as DashboardStockRouteImport } from './routes/dashboard.stock'
+import { Route as DashboardStaffRouteImport } from './routes/dashboard.staff'
+import { Route as DashboardServicesRouteImport } from './routes/dashboard.services'
 import { Route as DashboardProjectsRouteImport } from './routes/dashboard.projects'
+import { Route as DashboardIntegrationsRouteImport } from './routes/dashboard.integrations'
 import { Route as DashboardFinanceRouteImport } from './routes/dashboard.finance'
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard.customers'
 
@@ -43,9 +46,24 @@ const DashboardStockRoute = DashboardStockRouteImport.update({
   path: '/stock',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardStaffRoute = DashboardStaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardServicesRoute = DashboardServicesRouteImport.update({
+  id: '/services',
+  path: '/services',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardProjectsRoute = DashboardProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardIntegrationsRoute = DashboardIntegrationsRouteImport.update({
+  id: '/integrations',
+  path: '/integrations',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardFinanceRoute = DashboardFinanceRouteImport.update({
@@ -64,7 +82,10 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
+  '/dashboard/integrations': typeof DashboardIntegrationsRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/services': typeof DashboardServicesRoute
+  '/dashboard/staff': typeof DashboardStaffRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -73,7 +94,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
+  '/dashboard/integrations': typeof DashboardIntegrationsRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/services': typeof DashboardServicesRoute
+  '/dashboard/staff': typeof DashboardStaffRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
   '/dashboard': typeof DashboardIndexRoute
@@ -84,7 +108,10 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRouteWithChildren
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
+  '/dashboard/integrations': typeof DashboardIntegrationsRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/services': typeof DashboardServicesRoute
+  '/dashboard/staff': typeof DashboardStaffRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -96,7 +123,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/customers'
     | '/dashboard/finance'
+    | '/dashboard/integrations'
     | '/dashboard/projects'
+    | '/dashboard/services'
+    | '/dashboard/staff'
     | '/dashboard/stock'
     | '/dashboard/vendors'
     | '/dashboard/'
@@ -105,7 +135,10 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard/customers'
     | '/dashboard/finance'
+    | '/dashboard/integrations'
     | '/dashboard/projects'
+    | '/dashboard/services'
+    | '/dashboard/staff'
     | '/dashboard/stock'
     | '/dashboard/vendors'
     | '/dashboard'
@@ -115,7 +148,10 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/dashboard/customers'
     | '/dashboard/finance'
+    | '/dashboard/integrations'
     | '/dashboard/projects'
+    | '/dashboard/services'
+    | '/dashboard/staff'
     | '/dashboard/stock'
     | '/dashboard/vendors'
     | '/dashboard/'
@@ -163,11 +199,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardStockRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/staff': {
+      id: '/dashboard/staff'
+      path: '/staff'
+      fullPath: '/dashboard/staff'
+      preLoaderRoute: typeof DashboardStaffRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/services': {
+      id: '/dashboard/services'
+      path: '/services'
+      fullPath: '/dashboard/services'
+      preLoaderRoute: typeof DashboardServicesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/projects': {
       id: '/dashboard/projects'
       path: '/projects'
       fullPath: '/dashboard/projects'
       preLoaderRoute: typeof DashboardProjectsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/integrations': {
+      id: '/dashboard/integrations'
+      path: '/integrations'
+      fullPath: '/dashboard/integrations'
+      preLoaderRoute: typeof DashboardIntegrationsRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/finance': {
@@ -190,7 +247,10 @@ declare module '@tanstack/react-router' {
 interface DashboardRouteChildren {
   DashboardCustomersRoute: typeof DashboardCustomersRoute
   DashboardFinanceRoute: typeof DashboardFinanceRoute
+  DashboardIntegrationsRoute: typeof DashboardIntegrationsRoute
   DashboardProjectsRoute: typeof DashboardProjectsRoute
+  DashboardServicesRoute: typeof DashboardServicesRoute
+  DashboardStaffRoute: typeof DashboardStaffRoute
   DashboardStockRoute: typeof DashboardStockRoute
   DashboardVendorsRoute: typeof DashboardVendorsRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -199,7 +259,10 @@ interface DashboardRouteChildren {
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardCustomersRoute: DashboardCustomersRoute,
   DashboardFinanceRoute: DashboardFinanceRoute,
+  DashboardIntegrationsRoute: DashboardIntegrationsRoute,
   DashboardProjectsRoute: DashboardProjectsRoute,
+  DashboardServicesRoute: DashboardServicesRoute,
+  DashboardStaffRoute: DashboardStaffRoute,
   DashboardStockRoute: DashboardStockRoute,
   DashboardVendorsRoute: DashboardVendorsRoute,
   DashboardIndexRoute: DashboardIndexRoute,
