@@ -4,7 +4,6 @@ import { Factory, Phone, Lock, ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -18,11 +17,18 @@ export const Route = createFileRoute("/")({
 
 function Login() {
   const navigate = useNavigate();
-  const [otpMode, setOtpMode] = useState(false);
+  const [loginRole, setLoginRole] = useState<"admin" | "employee">("admin");
+  const [employeeName, setEmployeeName] = useState("");
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate({ to: "/dashboard" });
+    localStorage.setItem("factrova-login-role", loginRole);
+    if (loginRole === "employee") {
+      localStorage.setItem("factrova-employee-name", employeeName.trim() || "Employee");
+    } else {
+      localStorage.removeItem("factrova-employee-name");
+    }
+    navigate({ to: loginRole === "employee" ? "/employee/dashboard" : "/admin/dashboard" });
   };
 
   return (
@@ -82,6 +88,39 @@ function Login() {
 
           <form onSubmit={submit} className="space-y-5">
             <div className="space-y-2">
+              <Label>Login as</Label>
+              <div className="grid grid-cols-2 rounded-lg border border-border bg-muted/40 p-1">
+                {(["admin", "employee"] as const).map((role) => (
+                  <button
+                    key={role}
+                    type="button"
+                    onClick={() => setLoginRole(role)}
+                    className={`rounded-md px-3 py-2 text-sm font-medium capitalize transition ${
+                      loginRole === role
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {role}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {loginRole === "employee" && (
+              <div className="space-y-2">
+                <Label htmlFor="employeeName">Employee Name</Label>
+                <Input
+                  id="employeeName"
+                  value={employeeName}
+                  onChange={(e) => setEmployeeName(e.target.value)}
+                  placeholder="Enter employee name"
+                  className="h-11"
+                />
+              </div>
+            )}
+
+            <div className="space-y-2">
               <Label htmlFor="phone">Phone Number</Label>
               <div className="relative">
                 <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -96,7 +135,6 @@ function Login() {
               </div>
             </div>
 
-            {!otpMode ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
@@ -109,24 +147,9 @@ function Login() {
                   <Input id="password" type="password" placeholder="••••••••" className="h-11 pl-10" />
                 </div>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <Label htmlFor="otp">OTP</Label>
-                <Input id="otp" inputMode="numeric" maxLength={6} placeholder="6-digit code" className="h-11 tracking-widest" />
-                <p className="text-xs text-muted-foreground">A code will be sent to your phone.</p>
-              </div>
-            )}
-
-            <div className="flex items-center justify-between rounded-lg border border-border bg-muted/40 px-4 py-3">
-              <div>
-                <p className="text-sm font-medium">Sign in with OTP</p>
-                <p className="text-xs text-muted-foreground">Use a one-time password instead</p>
-              </div>
-              <Switch checked={otpMode} onCheckedChange={setOtpMode} />
-            </div>
 
             <Button type="submit" className="h-11 w-full text-sm font-semibold" size="lg">
-              {otpMode ? "Send OTP" : "Sign in"}
+              Sign in
               <ArrowRight className="ml-1 h-4 w-4" />
             </Button>
 

@@ -24,7 +24,7 @@ export const Route = createFileRoute("/dashboard/")({
 
 const PIE_COLORS = ["oklch(0.52 0.23 287)", "oklch(0.65 0.16 155)", "oklch(0.78 0.16 75)"];
 
-function Overview() {
+export function Overview() {
   const total = projects.length;
   const active = projects.filter((p) => p.status === "ongoing").length;
   const done = projects.filter((p) => p.status === "completed").length;

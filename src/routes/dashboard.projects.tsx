@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -29,6 +30,7 @@ import {
   Check,
   Trash2,
 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import { projects as initial, type Project, type ProjectStatus } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -48,6 +50,8 @@ function Projects() {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<ProjectStatus | "all">("all");
   const [open, setOpen] = useState(false);
+  const [loginRole, setLoginRole] = useState<"admin" | "employee">("admin");
+  const employeeMode = loginRole === "employee";
 
   const filtered = list.filter(
     (p) =>
@@ -55,8 +59,13 @@ function Projects() {
       [p.name, p.customer].join(" ").toLowerCase().includes(q.toLowerCase()),
   );
 
+  useEffect(() => {
+    const storedRole = localStorage.getItem("factrova-login-role");
+    setLoginRole(storedRole === "employee" ? "employee" : "admin");
+  }, []);
+
   return (
-    <DashboardLayout title="Projects">
+    <DashboardLayout title={employeeMode ? "My Projects" : "Projects"}>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[200px] max-w-sm flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -78,11 +87,13 @@ function Projects() {
             <SelectItem value="hold">On hold</SelectItem>
           </SelectContent>
         </Select>
-        <div className="ml-auto">
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="mr-1 h-4 w-4" /> New Project
-          </Button>
-        </div>
+        {!employeeMode && (
+          <div className="ml-auto">
+            <Button onClick={() => setOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" /> New Project
+            </Button>
+          </div>
+        )}
       </div>
 
       <Card className="border-border/60 shadow-[var(--shadow-card)]">
@@ -137,11 +148,13 @@ function Projects() {
         </CardContent>
       </Card>
 
-      <CreateProjectDialog
-        open={open}
-        onOpenChange={setOpen}
-        onCreate={(p) => setList((l) => [p, ...l])}
-      />
+      {!employeeMode && (
+        <CreateProjectDialog
+          open={open}
+          onOpenChange={setOpen}
+          onCreate={(p) => setList((l) => [p, ...l])}
+        />
+      )}
     </DashboardLayout>
   );
 }
@@ -175,8 +188,19 @@ function CreateProjectDialog({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [addCustOpen, setAddCustOpen] = useState(false);
-  const [newCust, setNewCust] = useState({ company: "", contact: "", phone: "" });
+  const [advancedCustomerOpen, setAdvancedCustomerOpen] = useState(false);
+  const [newCust, setNewCust] = useState({
+    company: "",
+    contact: "",
+    phone: "",
+    address: "",
+    state: "",
+    district: "",
+    pincode: "",
+    gstin: "",
+  });
   const [data, setData] = useState({
+    workType: "own" as "own" | "job",
     customer: "",
     name: "",
     delivery: "",
@@ -201,6 +225,7 @@ function CreateProjectDialog({
   const reset = () => {
     setStep(0);
     setData({
+      workType: "own",
       customer: "",
       name: "",
       delivery: "",
@@ -220,6 +245,11 @@ function CreateProjectDialog({
         company: newCust.company.trim(),
         contact: newCust.contact.trim() || null,
         phone: newCust.phone.trim() || null,
+        address: newCust.address.trim() || null,
+        state: newCust.state.trim() || null,
+        district: newCust.district.trim() || null,
+        pincode: newCust.pincode.trim() || null,
+        gstin: newCust.gstin.trim() || null,
       })
       .select("id, company")
       .single();
@@ -227,7 +257,17 @@ function CreateProjectDialog({
     toast.success("Customer added");
     setCustomers((c) => [...c, row as Customer]);
     setData((d) => ({ ...d, customer: row!.company }));
-    setNewCust({ company: "", contact: "", phone: "" });
+    setNewCust({
+      company: "",
+      contact: "",
+      phone: "",
+      address: "",
+      state: "",
+      district: "",
+      pincode: "",
+      gstin: "",
+    });
+    setAdvancedCustomerOpen(false);
     setAddCustOpen(false);
   };
 
@@ -291,6 +331,23 @@ function CreateProjectDialog({
           <div className="mt-4 min-h-[280px]">
             {step === 0 && (
               <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label>Work Type</Label>
+                  <RadioGroup
+                    value={data.workType}
+                    onValueChange={(v) => setData({ ...data, workType: v as "own" | "job" })}
+                    className="grid gap-2 sm:grid-cols-2"
+                  >
+                    <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/30 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-[image:var(--gradient-soft)]">
+                      <RadioGroupItem value="own" />
+                      <span className="text-sm font-medium">Own Work</span>
+                    </label>
+                    <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-card p-3 transition-colors hover:bg-muted/30 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-[image:var(--gradient-soft)]">
+                      <RadioGroupItem value="job" />
+                      <span className="text-sm font-medium">Job Work</span>
+                    </label>
+                  </RadioGroup>
+                </div>
                 <div className="space-y-1.5 sm:col-span-2">
                   <Label>Customer</Label>
                   <div className="flex gap-2">
@@ -504,6 +561,7 @@ function CreateProjectDialog({
             {step === 3 && (
               <div className="space-y-4">
                 <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm">
+                  <Row k="Work type" v={data.workType === "own" ? "Own Work" : "Job Work"} />
                   <Row k="Customer" v={data.customer || "—"} />
                   <Row k="Project" v={data.name || "—"} />
                   <Row k="Delivery" v={data.delivery || "—"} />
@@ -568,7 +626,7 @@ function CreateProjectDialog({
       </Dialog>
 
       {/* Quick add customer */}
-      <Dialog open={addCustOpen} onOpenChange={setAddCustOpen}>
+      <Dialog open={addCustOpen} onOpenChange={(v) => { setAddCustOpen(v); if (!v) setAdvancedCustomerOpen(false); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add new customer</DialogTitle>
@@ -597,6 +655,56 @@ function CreateProjectDialog({
                 />
               </div>
             </div>
+            <div>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto px-0 text-sm font-medium text-foreground hover:bg-transparent"
+                onClick={() => setAdvancedCustomerOpen((v) => !v)}
+              >
+                Advanced
+                <ChevronDown className={cn("ml-1 h-4 w-4 transition-transform", advancedCustomerOpen && "rotate-180")} />
+              </Button>
+            </div>
+            {advancedCustomerOpen && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Address</Label>
+                  <Input
+                    value={newCust.address}
+                    onChange={(e) => setNewCust({ ...newCust, address: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>State</Label>
+                  <Input
+                    value={newCust.state}
+                    onChange={(e) => setNewCust({ ...newCust, state: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>District</Label>
+                  <Input
+                    value={newCust.district}
+                    onChange={(e) => setNewCust({ ...newCust, district: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Pincode</Label>
+                  <Input
+                    value={newCust.pincode}
+                    onChange={(e) => setNewCust({ ...newCust, pincode: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>GSTIN</Label>
+                  <Input
+                    value={newCust.gstin}
+                    onChange={(e) => setNewCust({ ...newCust, gstin: e.target.value })}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddCustOpen(false)}>

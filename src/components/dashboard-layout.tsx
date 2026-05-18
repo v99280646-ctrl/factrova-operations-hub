@@ -9,13 +9,13 @@ import {
   LogOut,
   Search,
   Bell,
+  Settings,
   ChevronDown,
   Factory,
   Wrench,
   ShieldCheck,
-  Plug,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -37,13 +37,73 @@ const nav = [
   { to: "/dashboard/staff", label: "Staff Access & Perfomance", icon: ShieldCheck },
   { to: "/dashboard/stock", label: "Stock Management", icon: Boxes },
   { to: "/dashboard/finance", label: "Accounts & Finance", icon: Wallet },
-  { to: "/dashboard/integrations", label: "Integrations", icon: Plug },
+  { to: "/dashboard/notifications", label: "Notifications", icon: Bell },
+  { to: "/dashboard/settings", label: "Settings", icon: Settings },
 ] as const;
 
-export function DashboardLayout({ title, children }: { title: string; children: ReactNode }) {
+const employeeHiddenRoutes = [
+  "/dashboard",
+  "/dashboard/vendors",
+  "/dashboard/services",
+  "/dashboard/staff",
+  "/dashboard/finance",
+  "/dashboard/notifications",
+  "/dashboard/settings",
+];
+
+const adminHome = "/admin/dashboard";
+const employeeHome = "/employee/dashboard";
+
+function isEmployeeHiddenPath(pathname: string) {
+  return employeeHiddenRoutes.some((route) =>
+    route === "/dashboard" ? pathname === route : pathname.startsWith(route),
+  );
+}
+
+export function DashboardLayout({
+  title,
+  children,
+  role,
+}: {
+  title: string;
+  children: ReactNode;
+  role?: "admin" | "employee";
+}) {
   const [collapsed, setCollapsed] = useState(false);
+  const [loginRole, setLoginRole] = useState<"admin" | "employee">("admin");
+  const [employeeName, setEmployeeName] = useState("Employee");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
+  const effectiveRole = role ?? loginRole;
+  const employeeMode = effectiveRole === "employee";
+  const profileName = employeeMode ? employeeName : "Admin";
+  const profileInitials = profileName
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || (employeeMode ? "EM" : "AK");
+  const visibleNav = employeeMode
+    ? [
+        { to: employeeHome, label: "My Projects", icon: FolderKanban },
+        ...nav.filter((item) => ["/dashboard/customers", "/dashboard/stock"].includes(item.to)),
+      ]
+    : nav.map((item) =>
+        item.to === "/dashboard" ? { ...item, to: adminHome } : item,
+      );
+
+  useEffect(() => {
+    const storedRole = localStorage.getItem("factrova-login-role");
+    const storedEmployeeName = localStorage.getItem("factrova-employee-name");
+    setLoginRole(role ?? (storedRole === "employee" ? "employee" : "admin"));
+    setEmployeeName(storedEmployeeName?.trim() || "Employee");
+  }, [role]);
+
+  useEffect(() => {
+    if (employeeMode && (isEmployeeHiddenPath(pathname) || pathname.startsWith("/admin"))) {
+      navigate({ to: employeeHome });
+    }
+  }, [employeeMode, navigate, pathname]);
 
   return (
     <div className="flex min-h-screen w-full bg-muted/30">
@@ -69,10 +129,14 @@ export function DashboardLayout({ title, children }: { title: string; children: 
         </div>
 
         <nav className="flex flex-col gap-1 p-3">
-          {nav.map((item) => {
+          {visibleNav.map((item) => {
             const active =
-              item.to === "/dashboard"
-                ? pathname === "/dashboard"
+              item.to === adminHome
+                ? pathname === adminHome || pathname === "/dashboard"
+                : item.to === employeeHome
+                  ? pathname === employeeHome
+                  : item.to === "/dashboard"
+                    ? pathname === "/dashboard"
                 : pathname.startsWith(item.to);
             const Icon = item.icon;
             return (
@@ -111,27 +175,42 @@ export function DashboardLayout({ title, children }: { title: string; children: 
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input placeholder="Search…" className="h-9 w-64 pl-9" />
             </div>
-            <button className="relative flex h-9 w-9 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:text-foreground">
-              <Bell className="h-4 w-4" />
-              <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary" />
-            </button>
+            {!employeeMode && (
+              <button className="relative flex h-9 w-9 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:text-foreground">
+                <Bell className="h-4 w-4" />
+                <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary" />
+              </button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger className="flex items-center gap-2 rounded-md border border-border bg-card px-2 py-1 hover:bg-accent">
                 <Avatar className="h-7 w-7">
                   <AvatarFallback className="bg-[image:var(--gradient-primary)] text-xs font-semibold text-primary-foreground">
-                    AK
+                    {profileInitials}
                   </AvatarFallback>
                 </Avatar>
-                <span className="hidden text-sm font-medium md:inline">Admin</span>
+                <span className="hidden max-w-36 truncate text-sm font-medium md:inline">
+                  {profileName}
+                </span>
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuLabel>
+                  <span className="block truncate">{profileName}</span>
+                  <span className="block text-xs font-normal text-muted-foreground">
+                    {employeeMode ? "Employee" : "Admin"}
+                  </span>
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>Profile</DropdownMenuItem>
-                <DropdownMenuItem>Settings</DropdownMenuItem>
+                {!employeeMode && <DropdownMenuItem>Settings</DropdownMenuItem>}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate({ to: "/" })}>
+                <DropdownMenuItem
+                  onClick={() => {
+                    localStorage.removeItem("factrova-login-role");
+                    localStorage.removeItem("factrova-employee-name");
+                    navigate({ to: "/" });
+                  }}
+                >
                   <LogOut className="mr-2 h-4 w-4" /> Logout
                 </DropdownMenuItem>
               </DropdownMenuContent>

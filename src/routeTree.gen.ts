@@ -12,14 +12,17 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
+import { Route as EmployeeDashboardRouteImport } from './routes/employee.dashboard'
 import { Route as DashboardVendorsRouteImport } from './routes/dashboard.vendors'
 import { Route as DashboardStockRouteImport } from './routes/dashboard.stock'
 import { Route as DashboardStaffRouteImport } from './routes/dashboard.staff'
+import { Route as DashboardSettingsRouteImport } from './routes/dashboard.settings'
 import { Route as DashboardServicesRouteImport } from './routes/dashboard.services'
 import { Route as DashboardProjectsRouteImport } from './routes/dashboard.projects'
-import { Route as DashboardIntegrationsRouteImport } from './routes/dashboard.integrations'
+import { Route as DashboardNotificationsRouteImport } from './routes/dashboard.notifications'
 import { Route as DashboardFinanceRouteImport } from './routes/dashboard.finance'
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard.customers'
+import { Route as AdminDashboardRouteImport } from './routes/admin.dashboard'
 
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
@@ -36,6 +39,11 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
   path: '/',
   getParentRoute: () => DashboardRoute,
 } as any)
+const EmployeeDashboardRoute = EmployeeDashboardRouteImport.update({
+  id: '/employee/dashboard',
+  path: '/employee/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardVendorsRoute = DashboardVendorsRouteImport.update({
   id: '/vendors',
   path: '/vendors',
@@ -51,6 +59,11 @@ const DashboardStaffRoute = DashboardStaffRouteImport.update({
   path: '/staff',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardSettingsRoute = DashboardSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardServicesRoute = DashboardServicesRouteImport.update({
   id: '/services',
   path: '/services',
@@ -61,9 +74,9 @@ const DashboardProjectsRoute = DashboardProjectsRouteImport.update({
   path: '/projects',
   getParentRoute: () => DashboardRoute,
 } as any)
-const DashboardIntegrationsRoute = DashboardIntegrationsRouteImport.update({
-  id: '/integrations',
-  path: '/integrations',
+const DashboardNotificationsRoute = DashboardNotificationsRouteImport.update({
+  id: '/notifications',
+  path: '/notifications',
   getParentRoute: () => DashboardRoute,
 } as any)
 const DashboardFinanceRoute = DashboardFinanceRouteImport.update({
@@ -76,44 +89,58 @@ const DashboardCustomersRoute = DashboardCustomersRouteImport.update({
   path: '/customers',
   getParentRoute: () => DashboardRoute,
 } as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/admin/dashboard',
+  path: '/admin/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/admin/dashboard': typeof AdminDashboardRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
-  '/dashboard/integrations': typeof DashboardIntegrationsRoute
+  '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
   '/dashboard/services': typeof DashboardServicesRoute
+  '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/staff': typeof DashboardStaffRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
+  '/employee/dashboard': typeof EmployeeDashboardRoute
   '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin/dashboard': typeof AdminDashboardRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
-  '/dashboard/integrations': typeof DashboardIntegrationsRoute
+  '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
   '/dashboard/services': typeof DashboardServicesRoute
+  '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/staff': typeof DashboardStaffRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
+  '/employee/dashboard': typeof EmployeeDashboardRoute
   '/dashboard': typeof DashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteWithChildren
+  '/admin/dashboard': typeof AdminDashboardRoute
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
-  '/dashboard/integrations': typeof DashboardIntegrationsRoute
+  '/dashboard/notifications': typeof DashboardNotificationsRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
   '/dashboard/services': typeof DashboardServicesRoute
+  '/dashboard/settings': typeof DashboardSettingsRoute
   '/dashboard/staff': typeof DashboardStaffRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
+  '/employee/dashboard': typeof EmployeeDashboardRoute
   '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRouteTypes {
@@ -121,45 +148,56 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
+    | '/admin/dashboard'
     | '/dashboard/customers'
     | '/dashboard/finance'
-    | '/dashboard/integrations'
+    | '/dashboard/notifications'
     | '/dashboard/projects'
     | '/dashboard/services'
+    | '/dashboard/settings'
     | '/dashboard/staff'
     | '/dashboard/stock'
     | '/dashboard/vendors'
+    | '/employee/dashboard'
     | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin/dashboard'
     | '/dashboard/customers'
     | '/dashboard/finance'
-    | '/dashboard/integrations'
+    | '/dashboard/notifications'
     | '/dashboard/projects'
     | '/dashboard/services'
+    | '/dashboard/settings'
     | '/dashboard/staff'
     | '/dashboard/stock'
     | '/dashboard/vendors'
+    | '/employee/dashboard'
     | '/dashboard'
   id:
     | '__root__'
     | '/'
     | '/dashboard'
+    | '/admin/dashboard'
     | '/dashboard/customers'
     | '/dashboard/finance'
-    | '/dashboard/integrations'
+    | '/dashboard/notifications'
     | '/dashboard/projects'
     | '/dashboard/services'
+    | '/dashboard/settings'
     | '/dashboard/staff'
     | '/dashboard/stock'
     | '/dashboard/vendors'
+    | '/employee/dashboard'
     | '/dashboard/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRouteWithChildren
+  AdminDashboardRoute: typeof AdminDashboardRoute
+  EmployeeDashboardRoute: typeof EmployeeDashboardRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -185,6 +223,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/employee/dashboard': {
+      id: '/employee/dashboard'
+      path: '/employee/dashboard'
+      fullPath: '/employee/dashboard'
+      preLoaderRoute: typeof EmployeeDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard/vendors': {
       id: '/dashboard/vendors'
       path: '/vendors'
@@ -206,6 +251,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardStaffRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/settings': {
+      id: '/dashboard/settings'
+      path: '/settings'
+      fullPath: '/dashboard/settings'
+      preLoaderRoute: typeof DashboardSettingsRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/services': {
       id: '/dashboard/services'
       path: '/services'
@@ -220,11 +272,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardProjectsRouteImport
       parentRoute: typeof DashboardRoute
     }
-    '/dashboard/integrations': {
-      id: '/dashboard/integrations'
-      path: '/integrations'
-      fullPath: '/dashboard/integrations'
-      preLoaderRoute: typeof DashboardIntegrationsRouteImport
+    '/dashboard/notifications': {
+      id: '/dashboard/notifications'
+      path: '/notifications'
+      fullPath: '/dashboard/notifications'
+      preLoaderRoute: typeof DashboardNotificationsRouteImport
       parentRoute: typeof DashboardRoute
     }
     '/dashboard/finance': {
@@ -241,15 +293,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardCustomersRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/admin/dashboard': {
+      id: '/admin/dashboard'
+      path: '/admin/dashboard'
+      fullPath: '/admin/dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 interface DashboardRouteChildren {
   DashboardCustomersRoute: typeof DashboardCustomersRoute
   DashboardFinanceRoute: typeof DashboardFinanceRoute
-  DashboardIntegrationsRoute: typeof DashboardIntegrationsRoute
+  DashboardNotificationsRoute: typeof DashboardNotificationsRoute
   DashboardProjectsRoute: typeof DashboardProjectsRoute
   DashboardServicesRoute: typeof DashboardServicesRoute
+  DashboardSettingsRoute: typeof DashboardSettingsRoute
   DashboardStaffRoute: typeof DashboardStaffRoute
   DashboardStockRoute: typeof DashboardStockRoute
   DashboardVendorsRoute: typeof DashboardVendorsRoute
@@ -259,9 +319,10 @@ interface DashboardRouteChildren {
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardCustomersRoute: DashboardCustomersRoute,
   DashboardFinanceRoute: DashboardFinanceRoute,
-  DashboardIntegrationsRoute: DashboardIntegrationsRoute,
+  DashboardNotificationsRoute: DashboardNotificationsRoute,
   DashboardProjectsRoute: DashboardProjectsRoute,
   DashboardServicesRoute: DashboardServicesRoute,
+  DashboardSettingsRoute: DashboardSettingsRoute,
   DashboardStaffRoute: DashboardStaffRoute,
   DashboardStockRoute: DashboardStockRoute,
   DashboardVendorsRoute: DashboardVendorsRoute,
@@ -275,6 +336,8 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRouteWithChildren,
+  AdminDashboardRoute: AdminDashboardRoute,
+  EmployeeDashboardRoute: EmployeeDashboardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
