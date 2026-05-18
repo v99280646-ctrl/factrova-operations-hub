@@ -14,7 +14,141 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      customers: {
+        Row: {
+          address: string | null
+          company: string
+          contact: string | null
+          created_at: string
+          email: string | null
+          id: string
+          phone: string | null
+        }
+        Insert: {
+          address?: string | null
+          company: string
+          contact?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          phone?: string | null
+        }
+        Update: {
+          address?: string | null
+          company?: string
+          contact?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          phone?: string | null
+        }
+        Relationships: []
+      }
+      integrations: {
+        Row: {
+          config: Json | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+        }
+        Insert: {
+          config?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+        }
+        Update: {
+          config?: Json | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      services: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          price: number
+          unit: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          price?: number
+          unit?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          price?: number
+          unit?: string
+        }
+        Relationships: []
+      }
+      staff: {
+        Row: {
+          access_level: string
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+          phone: string | null
+          role: string
+        }
+        Insert: {
+          access_level?: string
+          active?: boolean
+          created_at?: string
+          id?: string
+          name: string
+          phone?: string | null
+          role?: string
+        }
+        Update: {
+          access_level?: string
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+          phone?: string | null
+          role?: string
+        }
+        Relationships: []
+      }
+      vendors: {
+        Row: {
+          contact: string | null
+          created_at: string
+          id: string
+          materials: string | null
+          name: string
+        }
+        Insert: {
+          contact?: string | null
+          created_at?: string
+          id?: string
+          materials?: string | null
+          name: string
+        }
+        Update: {
+          contact?: string | null
+          created_at?: string
+          id?: string
+          materials?: string | null
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
