@@ -20,6 +20,8 @@ type Integration = {
   status: string;
 };
 
+const hiddenIntegrations = new Set(["Google Drive", "Shiprocket", "Tally ERP"]);
+
 function Integrations() {
   const [list, setList] = useState<Integration[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +33,7 @@ function Integrations() {
       .select("*")
       .order("name");
     if (error) toast.error(error.message);
-    else setList((data ?? []) as Integration[]);
+    else setList(((data ?? []) as Integration[]).filter((i) => !hiddenIntegrations.has(i.name)));
     setLoading(false);
   };
 

@@ -90,8 +90,5 @@ INSERT INTO public.staff (name, phone, role, access_level) VALUES
 
 -- Seed integrations
 INSERT INTO public.integrations (name, description, status) VALUES
-  ('Tally ERP', 'Sync accounts and ledger with Tally', 'disconnected'),
   ('WhatsApp Business', 'Send order updates to customers via WhatsApp', 'disconnected'),
-  ('Razorpay', 'Accept online payments from customers', 'disconnected'),
-  ('Google Drive', 'Backup invoices and project files', 'disconnected'),
-  ('Shiprocket', 'Manage outbound deliveries', 'disconnected');
+  ('Razorpay', 'Accept online payments from customers', 'disconnected');

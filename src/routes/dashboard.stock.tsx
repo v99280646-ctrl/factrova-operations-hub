@@ -70,35 +70,60 @@ function Stock() {
         </Dialog>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {list.map((s) => (
-          <Card key={s.id} className="border-border/60 shadow-[var(--shadow-card)]">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{s.type}</p>
-                  <p className="mt-1 text-base font-semibold">{s.material}</p>
-                </div>
-                <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
-                  s.quantity < 50 ? "border-warning/30 bg-warning/15 text-warning-foreground" : "border-success/20 bg-success/10 text-success"
-                }`}>
-                  {s.quantity < 50 ? "Low" : "In stock"}
-                </span>
-              </div>
-              <div className="mt-4 flex items-end justify-between">
-                <div>
-                  <p className="text-3xl font-bold tracking-tight">{s.quantity}</p>
-                  <p className="text-xs text-muted-foreground">{s.unit} available</p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button size="icon" variant="outline" onClick={() => adjust(s.id, -1)}><Minus className="h-4 w-4" /></Button>
-                  <Button size="icon" onClick={() => adjust(s.id, 1)}><Plus className="h-4 w-4" /></Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card className="border-border/60 shadow-[var(--shadow-card)]">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">Material</th>
+                  <th className="px-4 py-3 font-medium">Type</th>
+                  <th className="px-4 py-3 text-right font-medium">Quantity</th>
+                  <th className="px-4 py-3 font-medium">Unit</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((s) => (
+                  <tr key={s.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
+                    <td className="px-4 py-3 font-medium">{s.material}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{s.type}</td>
+                    <td className="px-4 py-3 text-right font-semibold">{s.quantity}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{s.unit}</td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                        s.quantity < 50
+                          ? "border-warning/30 bg-warning/15 text-warning-foreground"
+                          : "border-success/20 bg-success/10 text-success"
+                      }`}>
+                        {s.quantity < 50 ? "Low" : "In stock"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-1">
+                        <Button size="icon" variant="outline" onClick={() => adjust(s.id, -1)}>
+                          <Minus className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" onClick={() => adjust(s.id, 1)}>
+                          <Plus className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {list.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      No stock items found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
     </DashboardLayout>
   );
 }

@@ -34,7 +34,7 @@ const nav = [
   { to: "/dashboard/vendors", label: "Vendors", icon: Truck },
   { to: "/dashboard/projects", label: "Projects", icon: FolderKanban },
   { to: "/dashboard/services", label: "Services", icon: Wrench },
-  { to: "/dashboard/staff", label: "Staff Access", icon: ShieldCheck },
+  { to: "/dashboard/staff", label: "Staff Access & Perfomance", icon: ShieldCheck },
   { to: "/dashboard/stock", label: "Stock Management", icon: Boxes },
   { to: "/dashboard/finance", label: "Accounts & Finance", icon: Wallet },
   { to: "/dashboard/integrations", label: "Integrations", icon: Plug },
