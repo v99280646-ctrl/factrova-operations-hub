@@ -14,6 +14,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
 import { Route as DashboardVendorsRouteImport } from './routes/dashboard.vendors'
 import { Route as DashboardStockRouteImport } from './routes/dashboard.stock'
+import { Route as DashboardServicesRouteImport } from './routes/dashboard.services'
 import { Route as DashboardProjectsRouteImport } from './routes/dashboard.projects'
 import { Route as DashboardFinanceRouteImport } from './routes/dashboard.finance'
 import { Route as DashboardCustomersRouteImport } from './routes/dashboard.customers'
@@ -43,6 +44,11 @@ const DashboardStockRoute = DashboardStockRouteImport.update({
   path: '/stock',
   getParentRoute: () => DashboardRoute,
 } as any)
+const DashboardServicesRoute = DashboardServicesRouteImport.update({
+  id: '/services',
+  path: '/services',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const DashboardProjectsRoute = DashboardProjectsRouteImport.update({
   id: '/projects',
   path: '/projects',
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/services': typeof DashboardServicesRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -74,6 +81,7 @@ export interface FileRoutesByTo {
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/services': typeof DashboardServicesRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
   '/dashboard': typeof DashboardIndexRoute
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/dashboard/customers': typeof DashboardCustomersRoute
   '/dashboard/finance': typeof DashboardFinanceRoute
   '/dashboard/projects': typeof DashboardProjectsRoute
+  '/dashboard/services': typeof DashboardServicesRoute
   '/dashboard/stock': typeof DashboardStockRoute
   '/dashboard/vendors': typeof DashboardVendorsRoute
   '/dashboard/': typeof DashboardIndexRoute
@@ -97,6 +106,7 @@ export interface FileRouteTypes {
     | '/dashboard/customers'
     | '/dashboard/finance'
     | '/dashboard/projects'
+    | '/dashboard/services'
     | '/dashboard/stock'
     | '/dashboard/vendors'
     | '/dashboard/'
@@ -106,6 +116,7 @@ export interface FileRouteTypes {
     | '/dashboard/customers'
     | '/dashboard/finance'
     | '/dashboard/projects'
+    | '/dashboard/services'
     | '/dashboard/stock'
     | '/dashboard/vendors'
     | '/dashboard'
@@ -116,6 +127,7 @@ export interface FileRouteTypes {
     | '/dashboard/customers'
     | '/dashboard/finance'
     | '/dashboard/projects'
+    | '/dashboard/services'
     | '/dashboard/stock'
     | '/dashboard/vendors'
     | '/dashboard/'
@@ -163,6 +175,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardStockRouteImport
       parentRoute: typeof DashboardRoute
     }
+    '/dashboard/services': {
+      id: '/dashboard/services'
+      path: '/services'
+      fullPath: '/dashboard/services'
+      preLoaderRoute: typeof DashboardServicesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/dashboard/projects': {
       id: '/dashboard/projects'
       path: '/projects'
@@ -191,6 +210,7 @@ interface DashboardRouteChildren {
   DashboardCustomersRoute: typeof DashboardCustomersRoute
   DashboardFinanceRoute: typeof DashboardFinanceRoute
   DashboardProjectsRoute: typeof DashboardProjectsRoute
+  DashboardServicesRoute: typeof DashboardServicesRoute
   DashboardStockRoute: typeof DashboardStockRoute
   DashboardVendorsRoute: typeof DashboardVendorsRoute
   DashboardIndexRoute: typeof DashboardIndexRoute
@@ -200,6 +220,7 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardCustomersRoute: DashboardCustomersRoute,
   DashboardFinanceRoute: DashboardFinanceRoute,
   DashboardProjectsRoute: DashboardProjectsRoute,
+  DashboardServicesRoute: DashboardServicesRoute,
   DashboardStockRoute: DashboardStockRoute,
   DashboardVendorsRoute: DashboardVendorsRoute,
   DashboardIndexRoute: DashboardIndexRoute,
@@ -216,3 +237,12 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { createStart } from '@tanstack/react-start'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+  }
+}
