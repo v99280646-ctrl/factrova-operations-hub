@@ -20,27 +20,39 @@ export type Database = {
           company: string
           contact: string | null
           created_at: string
+          district: string | null
           email: string | null
+          gstin: string | null
           id: string
           phone: string | null
+          pincode: string | null
+          state: string | null
         }
         Insert: {
           address?: string | null
           company: string
           contact?: string | null
           created_at?: string
+          district?: string | null
           email?: string | null
+          gstin?: string | null
           id?: string
           phone?: string | null
+          pincode?: string | null
+          state?: string | null
         }
         Update: {
           address?: string | null
           company?: string
           contact?: string | null
           created_at?: string
+          district?: string | null
           email?: string | null
+          gstin?: string | null
           id?: string
           phone?: string | null
+          pincode?: string | null
+          state?: string | null
         }
         Relationships: []
       }

@@ -7,6 +7,10 @@ export interface Customer {
   phone: string;
   email: string;
   address: string;
+  state?: string;
+  district?: string;
+  pincode?: string;
+  gstin?: string;
 }
 
 export interface Vendor {

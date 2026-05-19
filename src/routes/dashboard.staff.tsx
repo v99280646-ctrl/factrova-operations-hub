@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -53,10 +54,18 @@ const ACCESS = [
   { v: "finance", label: "Finance only" },
   { v: "view", label: "View only" },
 ];
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+function formatPerformanceDate(date: Date) {
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${day} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
 
 function Staff() {
   const [list, setList] = useState<StaffRow[]>([]);
   const [open, setOpen] = useState(false);
+  const [selectedStaff, setSelectedStaff] = useState<StaffRow | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState("2026-05");
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     name: "",
@@ -121,6 +130,27 @@ function Staff() {
       lastUpdate: `2026-05-${String(18 - (index % 8)).padStart(2, "0")}`,
     };
   });
+  const selectedIndex = selectedStaff ? list.findIndex((s) => s.id === selectedStaff.id) : 0;
+  const [selectedYear, selectedMonthNumber] = (selectedMonth || "2026-05").split("-").map(Number);
+  const selectedDate = new Date(selectedYear, selectedMonthNumber - 1, 1);
+  const month = {
+    short: MONTHS[selectedDate.getMonth()],
+    days: new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate(),
+    year: selectedDate.getFullYear(),
+  };
+  const selectedAssignment = selectedStaff
+    ? assignments.find(({ staff }) => staff.id === selectedStaff.id)
+    : null;
+  const dailyPerformance = Array.from({ length: Math.min(12, month.days) }, (_, index) => {
+    const day = Math.min(25, month.days) - index;
+    const completed = 3 + (((selectedIndex + 1) * (index + 2) + selectedMonth.length) % 9);
+    const date = new Date(month.year, selectedDate.getMonth(), day);
+    return {
+      date: formatPerformanceDate(date),
+      completed,
+      status: "Completed",
+    };
+  });
 
   return (
     <DashboardLayout title="Staff Access & Perfomance">
@@ -167,7 +197,11 @@ function Staff() {
                         lastCompleted,
                         lastUpdate,
                       }) => (
-                        <tr key={staff.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
+                        <tr
+                          key={staff.id}
+                          className="cursor-pointer border-b border-border/50 last:border-0 hover:bg-muted/30"
+                          onClick={() => setSelectedStaff(staff)}
+                        >
                           <td className="px-4 py-3 font-medium">
                             <div className="flex items-center gap-2">
                               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[image:var(--gradient-soft)] text-primary">
@@ -186,7 +220,7 @@ function Staff() {
                             <span className="text-muted-foreground"> / {lastCompleted}</span>
                           </td>
                           <td className="px-4 py-3 text-right text-muted-foreground">{lastUpdate}</td>
-                          <td className="px-4 py-3 text-right">
+                          <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" aria-label={`Open actions for ${staff.name}`}>
@@ -355,6 +389,89 @@ function Staff() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Sheet open={!!selectedStaff} onOpenChange={(next) => !next && setSelectedStaff(null)}>
+        <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-3xl">
+          {selectedStaff && (
+            <>
+              <SheetHeader className="border-b border-border bg-[image:var(--gradient-soft)] px-6 py-5 text-left">
+                <SheetTitle>Staff Perfomance</SheetTitle>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {selectedStaff.name} - {selectedStaff.role}
+                </p>
+              </SheetHeader>
+
+              <div className="space-y-5 px-6 py-5">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Current month</p>
+                    <p className="mt-1 text-xl font-bold">
+                      {selectedAssignment?.currentCompleted ?? 0}
+                      <span className="text-sm font-medium text-muted-foreground">
+                        {" "}/ {selectedAssignment?.currentEstimated ?? 0}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Last month</p>
+                    <p className="mt-1 text-xl font-bold">
+                      {selectedAssignment?.lastCompleted ?? 0}
+                      <span className="text-sm font-medium text-muted-foreground">
+                        {" "}/ {selectedAssignment?.lastEstimated ?? 0}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Last update</p>
+                    <p className="mt-1 text-base font-semibold">
+                      {selectedAssignment?.lastUpdate
+                        ? formatPerformanceDate(new Date(selectedAssignment.lastUpdate))
+                        : "-"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="max-w-xs space-y-1.5">
+                  <Label htmlFor="performance-month">Month Selection</Label>
+                  <Input
+                    id="performance-month"
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value || "2026-05")}
+                  />
+                </div>
+
+                <Card className="border-border/60 shadow-[var(--shadow-card)]">
+                  <CardContent className="p-0">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                            <th className="px-4 py-3 font-medium">Date</th>
+                            <th className="px-4 py-3 font-medium">Completed Meterial Status</th>
+                            <th className="px-4 py-3 text-right font-medium">Count Of Completed Meterial</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dailyPerformance.map((row) => (
+                            <tr key={row.date} className="border-b border-border/50 last:border-0">
+                              <td className="px-4 py-3 font-medium">{row.date}</td>
+                              <td className="px-4 py-3">
+                                <Badge variant="secondary">{row.status}</Badge>
+                              </td>
+                              <td className="px-4 py-3 text-right font-semibold">{row.completed}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </DashboardLayout>
   );
 }

@@ -81,6 +81,11 @@ type ProjectServiceUsage = {
   completed: number;
   total: number;
 };
+type ProjectWasteMaterial = {
+  id: string;
+  material: string;
+  size: string;
+};
 
 const previewMaterials: ProjectMaterialStock[] = [
   { material: "Plywood 18mm", required: 28, inStock: 30, unit: "sheets" },
@@ -94,6 +99,17 @@ const previewServices: ProjectServiceUsage[] = [
   { name: "Veneer Pressing", completed: 25, total: 28 },
   { name: "Edge Banding", completed: 15, total: 28 },
   { name: "Cutting", completed: 3, total: 28 },
+];
+
+const wasteUsed: ProjectWasteMaterial[] = [
+  { id: "WU-001", material: "Plywood offcut", size: "18mm - 2 x 3 ft" },
+  { id: "WU-002", material: "Veneer strip", size: "4 in x 8 ft" },
+];
+
+const wasteCreated: ProjectWasteMaterial[] = [
+  { id: "WC-001", material: "MDF trimming", size: "18mm - mixed" },
+  { id: "WC-002", material: "Edge band scrap", size: "Walnut - short rolls" },
+  { id: "WC-003", material: "Laminate offcut", size: "1.5 x 2 ft" },
 ];
 
 function Projects() {
@@ -139,7 +155,7 @@ function Projects() {
   };
 
   return (
-    <DashboardLayout title={employeeMode ? "My Projects" : "Projects"}>
+    <DashboardLayout title="Projects">
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="relative min-w-[200px] max-w-sm flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -566,6 +582,17 @@ function ProjectPreviewSheet({
             </section>
 
             <section className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+                <Trash2 className="h-4 w-4" />
+                Waste Material stock
+              </h3>
+              <div className="grid gap-4 lg:grid-cols-2">
+                <WasteMaterialSection title="Waste Used" rows={wasteUsed} />
+                <WasteMaterialSection title="Waste Created" rows={wasteCreated} />
+              </div>
+            </section>
+
+            <section className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
                 <h3 className="flex items-center gap-2 text-sm font-semibold">
                   <UsersRound className="h-4 w-4" />
@@ -626,6 +653,43 @@ function PreviewCard({
       {children && <div className="mt-3">{children}</div>}
       <p className="mt-2 text-xs text-muted-foreground">{helper}</p>
     </section>
+  );
+}
+
+function WasteMaterialSection({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: ProjectWasteMaterial[];
+}) {
+  return (
+    <div className="rounded-lg border border-border/80">
+      <div className="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2">
+        <h4 className="text-sm font-semibold">{title}</h4>
+        <Badge variant="secondary">{rows.length} items</Badge>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-xs text-muted-foreground">
+              <th className="px-3 py-2 font-medium">ID</th>
+              <th className="px-3 py-2 font-medium">Material</th>
+              <th className="px-3 py-2 font-medium">Size</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="border-b border-border/70 last:border-0">
+                <td className="px-3 py-2 font-medium">{row.id}</td>
+                <td className="px-3 py-2">{row.material}</td>
+                <td className="px-3 py-2 text-muted-foreground">{row.size}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 

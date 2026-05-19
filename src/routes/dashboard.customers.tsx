@@ -13,8 +13,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Search, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Search, Pencil, Trash2 } from "lucide-react";
 import { customers as initial, type Customer } from "@/lib/data";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/dashboard/customers")({
   head: () => ({ meta: [{ title: "Customers — Factrova" }] }),
@@ -25,8 +26,20 @@ function Customers() {
   const [list, setList] = useState<Customer[]>(initial);
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [editing, setEditing] = useState<Customer | null>(null);
-  const blank: Customer = { id: "", company: "", contact: "", phone: "", email: "", address: "" };
+  const blank: Customer = {
+    id: "",
+    company: "",
+    contact: "",
+    phone: "",
+    email: "",
+    address: "",
+    state: "",
+    district: "",
+    pincode: "",
+    gstin: "",
+  };
   const [form, setForm] = useState<Customer>(blank);
 
   const filtered = list.filter((c) =>
@@ -42,6 +55,7 @@ function Customers() {
     setOpen(false);
     setEditing(null);
     setForm(blank);
+    setAdvancedOpen(false);
   };
 
   return (
@@ -51,9 +65,9 @@ function Customers() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers…" className="pl-9" />
         </div>
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditing(null); setForm(blank); } }}>
+        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setEditing(null); setForm(blank); setAdvancedOpen(false); } }}>
           <DialogTrigger asChild>
-            <Button onClick={() => { setEditing(null); setForm(blank); }}>
+            <Button onClick={() => { setEditing(null); setForm(blank); setAdvancedOpen(false); }}>
               <Plus className="mr-1 h-4 w-4" /> Add Customer
             </Button>
           </DialogTrigger>
@@ -67,8 +81,27 @@ function Customers() {
               <Field label="Phone" value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
               <Field label="Email" value={form.email} onChange={(v) => setForm({ ...form, email: v })} />
               <div className="sm:col-span-2">
-                <Field label="Address" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-auto px-0 text-sm font-medium text-foreground hover:bg-transparent"
+                  onClick={() => setAdvancedOpen((v) => !v)}
+                >
+                  Advanced
+                  <ChevronDown className={cn("ml-1 h-4 w-4 transition-transform", advancedOpen && "rotate-180")} />
+                </Button>
               </div>
+              {advancedOpen && (
+                <>
+                  <div className="sm:col-span-2">
+                    <Field label="Address" value={form.address} onChange={(v) => setForm({ ...form, address: v })} />
+                  </div>
+                  <Field label="State" value={form.state ?? ""} onChange={(v) => setForm({ ...form, state: v })} />
+                  <Field label="District" value={form.district ?? ""} onChange={(v) => setForm({ ...form, district: v })} />
+                  <Field label="Pincode" value={form.pincode ?? ""} onChange={(v) => setForm({ ...form, pincode: v })} />
+                  <Field label="GSTIN" value={form.gstin ?? ""} onChange={(v) => setForm({ ...form, gstin: v })} />
+                </>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
@@ -102,7 +135,7 @@ function Customers() {
                     <td className="px-4 py-3 text-muted-foreground">{c.address}</td>
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setForm(c); setOpen(true); }}>
+                        <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setForm({ ...blank, ...c }); setAdvancedOpen(false); setOpen(true); }}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button size="icon" variant="ghost" onClick={() => setList((l) => l.filter((x) => x.id !== c.id))}>

@@ -43,6 +43,10 @@ CREATE TABLE public.customers (
   phone TEXT,
   email TEXT,
   address TEXT,
+  state TEXT,
+  district TEXT,
+  pincode TEXT,
+  gstin TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
