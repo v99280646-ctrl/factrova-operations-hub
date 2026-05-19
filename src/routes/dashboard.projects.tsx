@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
@@ -22,6 +23,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Plus,
   Search,
@@ -29,6 +43,17 @@ import {
   ChevronRight,
   Check,
   Trash2,
+  MoreVertical,
+  CalendarDays,
+  ChartLine,
+  CircleDollarSign,
+  Cuboid,
+  Mail,
+  MapPin,
+  Package,
+  Phone,
+  UserRound,
+  UsersRound,
 } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
@@ -44,12 +69,41 @@ export const Route = createFileRoute("/dashboard/projects")({
 
 type Customer = { id: string; company: string };
 type Service = { id: string; name: string };
+type ProjectAction = "view" | "update";
+type ProjectMaterialStock = {
+  material: string;
+  required: number;
+  inStock: number;
+  unit: string;
+};
+type ProjectServiceUsage = {
+  name: string;
+  completed: number;
+  total: number;
+};
+
+const previewMaterials: ProjectMaterialStock[] = [
+  { material: "Plywood 18mm", required: 28, inStock: 30, unit: "sheets" },
+  { material: "Veneer - Teak", required: 28, inStock: 18, unit: "sheets" },
+  { material: "Edge Band - Walnut", required: 120, inStock: 40, unit: "meters" },
+  { material: "Hinges (soft-close)", required: 64, inStock: 12, unit: "pcs" },
+  { material: "Adhesive - Fevicol SH", required: 8, inStock: 9, unit: "kg" },
+];
+
+const previewServices: ProjectServiceUsage[] = [
+  { name: "Veneer Pressing", completed: 25, total: 28 },
+  { name: "Edge Banding", completed: 15, total: 28 },
+  { name: "Cutting", completed: 3, total: 28 },
+];
 
 function Projects() {
   const [list, setList] = useState<Project[]>(initial);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<ProjectStatus | "all">("all");
   const [open, setOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [previewProject, setPreviewProject] = useState<Project | null>(null);
+  const [projectAction, setProjectAction] = useState<ProjectAction>("view");
   const [loginRole, setLoginRole] = useState<"admin" | "employee">("admin");
   const employeeMode = loginRole === "employee";
 
@@ -63,6 +117,26 @@ function Projects() {
     const storedRole = localStorage.getItem("factrova-login-role");
     setLoginRole(storedRole === "employee" ? "employee" : "admin");
   }, []);
+
+  const openProjectAction = (project: Project, action: ProjectAction) => {
+    if (action === "view") {
+      setPreviewProject({ ...project });
+      return;
+    }
+    setSelectedProject({ ...project });
+    setProjectAction(action);
+  };
+
+  const saveProjectUpdate = (project: Project) => {
+    setList((items) => items.map((item) => (item.id === project.id ? project : item)));
+    setSelectedProject(null);
+    toast.success("Project updated");
+  };
+
+  const deleteProject = (project: Project) => {
+    setList((items) => items.filter((item) => item.id !== project.id));
+    toast.success("Project deleted");
+  };
 
   return (
     <DashboardLayout title={employeeMode ? "My Projects" : "Projects"}>
@@ -108,6 +182,9 @@ function Projects() {
                   <th className="px-4 py-3 font-medium">Progress</th>
                   <th className="px-4 py-3 font-medium">Delivery</th>
                   <th className="px-4 py-3 text-right font-medium">Amount</th>
+                  {!employeeMode && (
+                    <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -133,11 +210,44 @@ function Projects() {
                     <td className="px-4 py-3 text-right font-semibold">
                       ₹{p.amount.toLocaleString("en-IN")}
                     </td>
+                    {!employeeMode && (
+                      <td className="px-4 py-3 text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={`Project actions for ${p.name}`}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-36">
+                            <DropdownMenuItem onClick={() => openProjectAction(p, "view")}>
+                              View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openProjectAction(p, "update")}>
+                              Update
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => deleteProject(p)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </td>
+                    )}
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                    <td
+                      colSpan={employeeMode ? 6 : 7}
+                      className="px-4 py-10 text-center text-sm text-muted-foreground"
+                    >
                       No projects match.
                     </td>
                   </tr>
@@ -155,8 +265,399 @@ function Projects() {
           onCreate={(p) => setList((l) => [p, ...l])}
         />
       )}
+
+      {!employeeMode && (
+        <ProjectPreviewSheet
+          project={previewProject}
+          onClose={() => setPreviewProject(null)}
+        />
+      )}
+
+      {!employeeMode && (
+        <ProjectActionDialog
+          action={projectAction}
+          project={selectedProject}
+          onProjectChange={setSelectedProject}
+          onClose={() => setSelectedProject(null)}
+          onSave={saveProjectUpdate}
+        />
+      )}
     </DashboardLayout>
   );
+}
+
+function ProjectActionDialog({
+  action,
+  project,
+  onProjectChange,
+  onClose,
+  onSave,
+}: {
+  action: ProjectAction;
+  project: Project | null;
+  onProjectChange: (project: Project | null) => void;
+  onClose: () => void;
+  onSave: (project: Project) => void;
+}) {
+  const updateProject = <K extends keyof Project>(key: K, value: Project[K]) => {
+    onProjectChange(project ? { ...project, [key]: value } : project);
+  };
+
+  return (
+    <Dialog open={Boolean(project)} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{action === "view" ? "View project" : "Update project"}</DialogTitle>
+        </DialogHeader>
+        {project && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Project Name</Label>
+              <Input
+                value={project.name}
+                readOnly={action === "view"}
+                onChange={(e) => updateProject("name", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Customer</Label>
+              <Input
+                value={project.customer}
+                readOnly={action === "view"}
+                onChange={(e) => updateProject("customer", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              {action === "view" ? (
+                <div className="flex h-10 items-center rounded-md border border-input bg-muted/30 px-3">
+                  <StatusBadge status={project.status} />
+                </div>
+              ) : (
+                <Select
+                  value={project.status}
+                  onValueChange={(value) => updateProject("status", value as ProjectStatus)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ongoing">Ongoing</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="hold">On hold</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Progress</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={project.progress}
+                readOnly={action === "view"}
+                onChange={(e) => updateProject("progress", Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Delivery</Label>
+              <Input
+                type="date"
+                value={project.delivery}
+                readOnly={action === "view"}
+                onChange={(e) => updateProject("delivery", e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label>Amount</Label>
+              <Input
+                type="number"
+                min={0}
+                value={project.amount}
+                readOnly={action === "view"}
+                onChange={(e) => updateProject("amount", Number(e.target.value))}
+              />
+            </div>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            {action === "view" ? "Close" : "Cancel"}
+          </Button>
+          {action === "update" && project && (
+            <Button onClick={() => onSave(project)}>Save Update</Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ProjectPreviewSheet({
+  project,
+  onClose,
+}: {
+  project: Project | null;
+  onClose: () => void;
+}) {
+  const createdDate = "2026-03-10";
+  const progressTone =
+    project?.progress && project.progress >= 70
+      ? "bg-emerald-500"
+      : project?.progress && project.progress >= 40
+        ? "bg-sky-500"
+        : "bg-amber-500";
+
+  return (
+    <Sheet open={Boolean(project)} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-4xl">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Project preview</SheetTitle>
+        </SheetHeader>
+        {project && (
+          <div className="min-h-full bg-background p-5 sm:p-7">
+            <div className="mb-5 flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-2xl font-bold tracking-normal text-foreground">
+                    {project.name}
+                  </h2>
+                  <StatusBadge status={project.status} />
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {project.id} - Created {formatDate(createdDate)} - Delivery{" "}
+                  {formatDate(project.delivery)}
+                </p>
+              </div>
+              <div className="sm:text-right">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Order amount
+                </p>
+                <p className="text-3xl font-bold text-foreground">
+                  Rs {project.amount.toLocaleString("en-IN")}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-3">
+              <PreviewCard
+                icon={<ChartLine className="h-4 w-4" />}
+                label="Overall progress"
+                value={`${project.progress}%`}
+                helper="Current production status"
+              >
+                <ProgressLine value={project.progress} className={progressTone} />
+              </PreviewCard>
+              <PreviewCard
+                icon={<CalendarDays className="h-4 w-4" />}
+                label="Created"
+                value={formatDate(createdDate)}
+                helper="Start of production"
+              />
+              <PreviewCard
+                icon={<CalendarDays className="h-4 w-4" />}
+                label="Delivery"
+                value={formatDate(project.delivery)}
+                helper="27 days remaining"
+              />
+            </div>
+
+            <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.4fr]">
+              <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+                <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+                  <UserRound className="h-4 w-4" />
+                  Customer details
+                </h3>
+                <div className="flex items-center gap-3 border-b border-border pb-4">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-sm font-semibold">
+                    {project.customer
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)}
+                  </div>
+                  <div>
+                    <p className="font-semibold">{project.customer}</p>
+                    <p className="text-xs text-muted-foreground">Project customer</p>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-2 text-sm">
+                  <PreviewInfo icon={<Phone className="h-4 w-4" />} text="+91 98765 43210" />
+                  <PreviewInfo icon={<Mail className="h-4 w-4" />} text="projects@example.com" />
+                  <PreviewInfo
+                    icon={<MapPin className="h-4 w-4" />}
+                    text="B-204, Green Park, New Delhi, 110016"
+                  />
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+                <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+                  <CircleDollarSign className="h-4 w-4" />
+                  Services used
+                </h3>
+                <div className="space-y-4">
+                  {previewServices.map((service) => {
+                    const percent = Math.round((service.completed / service.total) * 100);
+                    return (
+                      <div key={service.name}>
+                        <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold text-foreground">{service.name}</span>
+                            <Badge variant="outline" className="rounded-md px-2 py-0 text-[10px]">
+                              In progress
+                            </Badge>
+                          </div>
+                          <span className="text-muted-foreground">
+                            {service.completed}/{service.total} {percent}%
+                          </span>
+                        </div>
+                        <ProgressLine value={percent} className={serviceProgressColor(percent)} />
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+
+            <section className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+                <Package className="h-4 w-4" />
+                Material stock
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                      <th className="px-2 py-2 font-medium">Material</th>
+                      <th className="px-2 py-2 text-right font-medium">In stock</th>
+                      <th className="px-2 py-2 font-medium">Unit</th>
+                      <th className="px-2 py-2 text-right font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {previewMaterials.map((row) => {
+                      const sufficient = row.inStock >= row.required;
+                      return (
+                        <tr key={row.material} className="border-b border-border/70 last:border-0">
+                          <td className="px-2 py-2 font-medium">{row.material}</td>
+                          <td className="px-2 py-2 text-right">{row.inStock}</td>
+                          <td className="px-2 py-2 text-muted-foreground">{row.unit}</td>
+                          <td className="px-2 py-2 text-right">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "rounded-md",
+                                sufficient
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "border-amber-200 bg-amber-50 text-amber-700",
+                              )}
+                            >
+                              {sufficient ? "Sufficient" : "Low"}
+                            </Badge>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="mt-4 rounded-lg border border-border bg-card p-4 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <UsersRound className="h-4 w-4" />
+                  Assigned employees
+                </h3>
+                <Badge variant="secondary">5 members</Badge>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {[
+                  ["AV", "Anil Verma", "Project Lead"],
+                  ["SK", "Suresh Kumar", "Veneer Pressing"],
+                  ["MY", "Manoj Yadav", "Edge Banding"],
+                  ["IS", "Imran Sheikh", "Cutting"],
+                  ["DS", "Deepak Singh", "Material Handling"],
+                ].map(([initials, name, role]) => (
+                  <div key={name} className="flex items-center gap-3 rounded-lg border border-border p-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                      {initials}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{name}</p>
+                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Cuboid className="h-3 w-3" />
+                        {role}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+function PreviewCard({
+  icon,
+  label,
+  value,
+  helper,
+  children,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  helper: string;
+  children?: ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+      <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+        {icon}
+        {label}
+      </p>
+      <p className="text-xl font-bold text-foreground">{value}</p>
+      {children && <div className="mt-3">{children}</div>}
+      <p className="mt-2 text-xs text-muted-foreground">{helper}</p>
+    </section>
+  );
+}
+
+function PreviewInfo({ icon, text }: { icon: ReactNode; text: string }) {
+  return (
+    <p className="flex items-start gap-2 text-muted-foreground">
+      <span className="mt-0.5 shrink-0">{icon}</span>
+      <span>{text}</span>
+    </p>
+  );
+}
+
+function ProgressLine({ value, className }: { value: number; className: string }) {
+  return (
+    <div className="h-2 overflow-hidden rounded-full bg-muted">
+      <div className={cn("h-full rounded-full", className)} style={{ width: `${value}%` }} />
+    </div>
+  );
+}
+
+function serviceProgressColor(value: number) {
+  if (value >= 80) return "bg-emerald-500";
+  if (value >= 50) return "bg-sky-500";
+  return "bg-amber-500";
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
 }
 
 const STEPS = ["Basic info", "Materials", "Services", "Summary"] as const;
