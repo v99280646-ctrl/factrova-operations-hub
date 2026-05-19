@@ -11,7 +11,6 @@ import {
   Bell,
   Settings,
   ChevronDown,
-  Factory,
   Wrench,
   ShieldCheck,
 } from "lucide-react";
@@ -27,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import factrovaLogo from "@/images/tfacrova logo.png";
 
 const nav = [
   { to: "/dashboard", label: "Overview", icon: LayoutDashboard },
@@ -86,6 +86,7 @@ export function DashboardLayout({
   const visibleNav = employeeMode
     ? [
         { to: employeeHome, label: "My Projects", icon: FolderKanban },
+        { to: "/dashboard/projects", label: "Projects", icon: FolderKanban },
         ...nav.filter((item) => ["/dashboard/customers", "/dashboard/stock"].includes(item.to)),
       ]
     : nav.map((item) =>
@@ -115,8 +116,8 @@ export function DashboardLayout({
         )}
       >
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[image:var(--gradient-primary)] text-primary-foreground shadow-[var(--shadow-elegant)]">
-            <Factory className="h-5 w-5" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-background">
+            <img src={factrovaLogo} alt="Factrova" className="h-8 w-8 object-contain" />
           </div>
           {!collapsed && (
             <div className="flex-1 overflow-hidden">
