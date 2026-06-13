@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { clearAuthSession, getAuthSession } from "@/lib/auth";
 import factrovaLogo from "@/images/tfacrova logo.png";
 
 const nav = [
@@ -71,12 +72,15 @@ export function DashboardLayout({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [loginRole, setLoginRole] = useState<"admin" | "employee">("admin");
+  const [adminName, setAdminName] = useState("Admin");
   const [employeeName, setEmployeeName] = useState("Employee");
+  const [employeePosition, setEmployeePosition] = useState("Employee");
+  const [profileEmail, setProfileEmail] = useState("");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const effectiveRole = role ?? loginRole;
   const employeeMode = effectiveRole === "employee";
-  const profileName = employeeMode ? employeeName : "Admin";
+  const profileName = employeeMode ? employeeName : adminName;
   const profileInitials = profileName
     .split(" ")
     .filter(Boolean)
@@ -94,10 +98,18 @@ export function DashboardLayout({
       );
 
   useEffect(() => {
+    const session = getAuthSession();
     const storedRole = localStorage.getItem("factrova-login-role");
     const storedEmployeeName = localStorage.getItem("factrova-employee-name");
+    const storedEmployeePosition = localStorage.getItem("factrova-employee-position");
+    const storedProfileName = localStorage.getItem("factrova-profile-name");
+    const storedProfileEmail = localStorage.getItem("factrova-profile-email");
+    const employeeMembership = session?.memberships.find((membership) => membership.role === "employee");
     setLoginRole(role ?? (storedRole === "employee" ? "employee" : "admin"));
-    setEmployeeName(storedEmployeeName?.trim() || "Employee");
+    setAdminName(storedProfileName?.trim() || session?.profile.fullName || session?.profile.email || "Admin");
+    setEmployeeName(storedEmployeeName?.trim() || storedProfileName?.trim() || session?.profile.fullName || "Employee");
+    setEmployeePosition(storedEmployeePosition?.trim() || employeeMembership?.employeeRole || "Employee");
+    setProfileEmail(storedProfileEmail || session?.profile.email || "");
   }, [role]);
 
   useEffect(() => {
@@ -198,7 +210,7 @@ export function DashboardLayout({
                 <DropdownMenuLabel>
                   <span className="block truncate">{profileName}</span>
                   <span className="block text-xs font-normal text-muted-foreground">
-                    {employeeMode ? "Employee" : "Admin"}
+                    {employeeMode ? employeePosition : profileEmail || "Admin"}
                   </span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
@@ -207,8 +219,7 @@ export function DashboardLayout({
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => {
-                    localStorage.removeItem("factrova-login-role");
-                    localStorage.removeItem("factrova-employee-name");
+                    clearAuthSession();
                     navigate({ to: "/" });
                   }}
                 >

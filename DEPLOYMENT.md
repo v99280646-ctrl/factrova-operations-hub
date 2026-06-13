@@ -12,13 +12,10 @@ Use the default Vercel settings:
 
 Required environment variables:
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_API_BASE_URL`
+- `VITE_GOOGLE_CLIENT_ID`
 
-Add these only if server-side Supabase helpers are used in production:
-
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+The backend must also be deployed with matching Google OAuth and JWT settings.
 
 Local verification:
 

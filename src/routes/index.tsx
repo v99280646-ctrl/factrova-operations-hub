@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
-import { Phone, Lock, ArrowRight } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Mail, ArrowRight } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { getAuthSession, getHomeRoute, saveAuthSession, type AuthSession } from "@/lib/auth";
 import factrovaLogo from "@/images/tfacrova logo.png";
 import whiteFactrovaLogo from "@/images/white facrova logo.png";
 
@@ -17,22 +18,133 @@ export const Route = createFileRoute("/")({
   component: Login,
 });
 
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (options: {
+            client_id: string;
+            callback: (response: { credential?: string }) => void;
+          }) => void;
+          prompt: (momentListener?: (notification: { isNotDisplayed?: () => boolean; isSkippedMoment?: () => boolean }) => void) => void;
+          renderButton: (
+            element: HTMLElement,
+            options: { theme?: string; size?: string; width?: number; text?: string },
+          ) => void;
+          disableAutoSelect: () => void;
+        };
+      };
+    };
+  }
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:4000/api/v1";
+const AUTH_BASE_URL = API_BASE_URL.replace(/\/v1\/?$/, "");
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "";
+const GOOGLE_SCRIPT_ID = "factrova-google-gsi";
+
+function loadGoogleScript(onLoad: () => void) {
+  const existing = document.getElementById(GOOGLE_SCRIPT_ID) as HTMLScriptElement | null;
+  if (existing) {
+    if (window.google) {
+      onLoad();
+    } else {
+      existing.addEventListener("load", onLoad, { once: true });
+    }
+    return;
+  }
+
+  const script = document.createElement("script");
+  script.id = GOOGLE_SCRIPT_ID;
+  script.src = "https://accounts.google.com/gsi/client";
+  script.async = true;
+  script.defer = true;
+  script.onload = onLoad;
+  document.head.appendChild(script);
+}
+
 function Login() {
   const navigate = useNavigate();
-  const [loginRole, setLoginRole] = useState<"admin" | "employee">("admin");
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [googleReady, setGoogleReady] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    localStorage.setItem("factrova-login-role", loginRole);
-    if (loginRole === "employee") {
-      localStorage.setItem("factrova-employee-name", "Anoop K");
-      localStorage.setItem("factrova-employee-position", "Cutting Mechine");
-    } else {
-      localStorage.removeItem("factrova-employee-name");
-      localStorage.removeItem("factrova-employee-position");
+  useEffect(() => {
+    const session = getAuthSession();
+    if (session) {
+      navigate({ to: getHomeRoute(session), replace: true });
     }
-    navigate({ to: loginRole === "employee" ? "/employee/dashboard" : "/admin/dashboard" });
-  };
+  }, [navigate]);
+
+  const loginWithGoogle = useCallback(
+    async (credential?: string) => {
+      if (!credential) {
+        toast.error("Google did not return a login credential");
+        return;
+      }
+      setLoading(true);
+      try {
+        const response = await fetch(`${AUTH_BASE_URL}/auth/google`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ credential }),
+        });
+        const rawBody = await response.text();
+        const payload = (rawBody ? JSON.parse(rawBody) : {}) as {
+          success?: boolean;
+          data?: AuthSession;
+          message?: string;
+        } ;
+        if (!response.ok || payload.success === false || !payload.data) {
+          throw new Error(payload.message || "Login failed");
+        }
+        saveAuthSession(payload.data);
+        const homeRoute =
+          payload.data.primaryRole === "super_admin"
+            ? "/Superadmin"
+            : payload.data.primaryRole === "employee"
+              ? "/employee/dashboard"
+              : getHomeRoute(payload.data);
+        navigate({ to: homeRoute, replace: true });
+        window.location.assign(homeRoute);
+      } catch (error) {
+        console.error("Google login failed", error);
+        toast.error(error instanceof Error ? error.message : "Unable to login");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    if (!GOOGLE_CLIENT_ID) return;
+    let cancelled = false;
+
+    const renderGoogle = () => {
+      if (cancelled || !window.google || !googleButtonRef.current) return;
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: ({ credential }) => loginWithGoogle(credential),
+      });
+      googleButtonRef.current.innerHTML = "";
+      window.google.accounts.id.renderButton(googleButtonRef.current, {
+        theme: "outline",
+        size: "large",
+        width: 360,
+        text: "continue_with",
+      });
+      window.google.accounts.id.prompt();
+      setGoogleReady(true);
+    };
+
+    loadGoogleScript(renderGoogle);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loginWithGoogle]);
 
   return (
     <div className="grid min-h-screen bg-background md:grid-cols-[1.05fr_0.95fr]">
@@ -78,66 +190,45 @@ function Login() {
             <span className="text-2xl font-bold tracking-tight text-foreground">Factrova</span>
           </div>
 
-          <form onSubmit={submit} className="space-y-5">
+          <div className="space-y-5">
             <div className="space-y-2">
-              <Label>Login as</Label>
-              <div className="grid grid-cols-2 rounded-lg border border-border bg-muted/40 p-1">
-                {(["admin", "employee"] as const).map((role) => (
-                  <button
-                    key={role}
-                    type="button"
-                    onClick={() => setLoginRole(role)}
-                    className={`rounded-md px-3 py-2 text-sm font-medium capitalize transition ${
-                      loginRole === role
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {role}
-                  </button>
-                ))}
+              <Label>Email login</Label>
+              <div className="rounded-lg border border-border bg-muted/30 p-3">
+                <div className="flex items-start gap-3">
+                  <Mail className="mt-0.5 h-4 w-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm font-medium">Use your Google account</p>
+                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                      Access is decided by the backend from your email and factory membership.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <div className="relative">
-                <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="phone"
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  placeholder="10-digit phone number"
-                  className="h-11 pl-10"
-                />
-              </div>
+            <div className="flex min-h-11 justify-center">
+              {GOOGLE_CLIENT_ID ? (
+                <div ref={googleButtonRef} className={loading ? "pointer-events-none opacity-60" : ""} />
+              ) : (
+                <Button type="button" disabled className="h-11 w-full text-sm font-semibold" size="lg">
+                  Google client id missing
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              )}
             </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password">Password</Label>
-                <button type="button" className="text-xs font-medium text-primary hover:underline">
-                  Forgot password?
-                </button>
-              </div>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="password" type="password" placeholder="Password" className="h-11 pl-10" />
-              </div>
-            </div>
-
-            <Button type="submit" className="h-11 w-full text-sm font-semibold" size="lg">
-              Sign in
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
+            {GOOGLE_CLIENT_ID && !googleReady && (
+              <p className="text-center text-xs text-muted-foreground">Loading Google login...</p>
+            )}
+            {GOOGLE_CLIENT_ID && googleReady && (
+              <p className="text-center text-xs text-muted-foreground">Google login is ready.</p>
+            )}
 
             <p className="text-center text-xs text-muted-foreground">
               By continuing you agree to our{" "}
               <Link to="/" className="text-primary hover:underline">Terms</Link> &{" "}
               <Link to="/" className="text-primary hover:underline">Privacy Policy</Link>.
             </p>
-          </form>
+          </div>
         </div>
       </main>
     </div>

@@ -30,35 +30,26 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
 import { MoreVertical, Plus, Trash2, ShieldCheck } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { DEFAULT_EMPLOYEE_ROLE, EMPLOYEE_ROLES } from "@/lib/employee-roles";
+import { api } from "@/lib/api";
+import { formatDateTimeCompact } from "@/lib/date-format";
+import { type StoredStaff } from "@/lib/staff-store";
 
 export const Route = createFileRoute("/dashboard/staff")({
   head: () => ({ meta: [{ title: "Staff Access & Perfomance - Factrova" }] }),
   component: Staff,
 });
 
-type StaffRow = {
-  id: string;
-  name: string;
-  phone: string | null;
-  role: string;
-  access_level: string;
-  active: boolean;
-};
+type StaffRow = StoredStaff;
+type ApiStaff = Omit<StaffRow, "access_level"> & { accessLevel: string };
 
-const ROLES = ["Floor Manager", "Machine Operator", "Accountant", "Sales", "Worker"];
-const ACCESS = [
-  { v: "admin", label: "Admin (full access)" },
-  { v: "manager", label: "Manager" },
-  { v: "finance", label: "Finance only" },
-  { v: "view", label: "View only" },
-];
+const ROLES = EMPLOYEE_ROLES;
+const ACCESS = EMPLOYEE_ROLES;
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
 
 function formatPerformanceDate(date: Date) {
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${day} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+  return formatDateTimeCompact(date);
 }
 
 function Staff() {
@@ -69,19 +60,30 @@ function Staff() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     name: "",
+    email: "",
     phone: "",
-    role: "Worker",
-    access_level: "view",
+    role: DEFAULT_EMPLOYEE_ROLE,
+    access_level: DEFAULT_EMPLOYEE_ROLE,
   });
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("staff")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error) toast.error(error.message);
-    else setList((data ?? []) as StaffRow[]);
+    try {
+      const data = await api.list<ApiStaff>("staff");
+      setList(
+        (data ?? []).map((row) => ({
+          id: row.id,
+          name: row.name,
+          email: row.email,
+          phone: row.phone,
+          role: row.role,
+          access_level: row.accessLevel,
+          active: row.active,
+        })),
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to load staff");
+    }
     setLoading(false);
   };
 
@@ -91,33 +93,57 @@ function Staff() {
 
   const add = async () => {
     if (!form.name.trim()) return toast.error("Name is required");
-    const { error } = await supabase.from("staff").insert({
+    if (!form.email.trim()) return toast.error("Email is required for staff login");
+    const staff: StaffRow = {
+      id: crypto.randomUUID(),
       name: form.name.trim(),
+      email: form.email.trim() || null,
       phone: form.phone.trim() || null,
       role: form.role,
       access_level: form.access_level,
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Staff added");
+      active: true,
+    };
+    try {
+      const data = await api.create<ApiStaff>("staff", {
+        name: staff.name,
+        email: staff.email,
+        phone: staff.phone,
+        role: staff.role,
+        accessLevel: staff.access_level,
+      });
+      await load();
+      const staffName = data.name || staff.name;
+      toast.success(`${staffName} added and can now sign in with Google`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save staff");
+    }
     setOpen(false);
-    setForm({ name: "", phone: "", role: "Worker", access_level: "view" });
-    load();
+    setForm({
+      name: "",
+      email: "",
+      phone: "",
+      role: DEFAULT_EMPLOYEE_ROLE,
+      access_level: DEFAULT_EMPLOYEE_ROLE,
+    });
   };
 
   const toggle = async (s: StaffRow) => {
-    const { error } = await supabase
-      .from("staff")
-      .update({ active: !s.active })
-      .eq("id", s.id);
-    if (error) return toast.error(error.message);
-    load();
+    try {
+      await api.update<ApiStaff>("staff", s.id, { active: !s.active });
+      await load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update staff");
+    }
   };
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from("staff").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Removed");
-    load();
+    try {
+      await api.remove("staff", id);
+      await load();
+      toast.success("Removed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to remove staff");
+    }
   };
 
   const assignments = list.map((staff, index) => {
@@ -219,7 +245,9 @@ function Staff() {
                             <span className="font-semibold">{lastEstimated}</span>
                             <span className="text-muted-foreground"> / {lastCompleted}</span>
                           </td>
-                          <td className="px-4 py-3 text-right text-muted-foreground">{lastUpdate}</td>
+                          <td className="px-4 py-3 text-right text-muted-foreground">
+                            {formatDateTimeCompact(lastUpdate)}
+                          </td>
                           <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
@@ -262,6 +290,7 @@ function Staff() {
                   <thead>
                     <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                       <th className="px-4 py-3 font-medium">Name</th>
+                      <th className="px-4 py-3 font-medium">Email</th>
                       <th className="px-4 py-3 font-medium">Phone</th>
                       <th className="px-4 py-3 font-medium">Role</th>
                       <th className="px-4 py-3 font-medium">Access</th>
@@ -272,7 +301,7 @@ function Staff() {
                   <tbody>
                     {loading && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                        <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                           Loading...
                         </td>
                       </tr>
@@ -288,6 +317,7 @@ function Staff() {
                               {s.name}
                             </div>
                           </td>
+                          <td className="px-4 py-3 text-muted-foreground">{s.email ?? "-"}</td>
                           <td className="px-4 py-3 text-muted-foreground">{s.phone ?? "-"}</td>
                           <td className="px-4 py-3">{s.role}</td>
                           <td className="px-4 py-3">
@@ -320,7 +350,7 @@ function Staff() {
                       ))}
                     {!loading && list.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                        <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                           No staff yet.
                         </td>
                       </tr>
@@ -342,6 +372,15 @@ function Staff() {
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Full name</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email ID</Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="name@example.com"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Phone</Label>
@@ -372,9 +411,9 @@ function Staff() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {ACCESS.map((a) => (
-                    <SelectItem key={a.v} value={a.v}>
-                      {a.label}
+                  {ACCESS.map((access) => (
+                    <SelectItem key={access} value={access}>
+                      {access}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Bell, Users } from "lucide-react";
+import { toast } from "sonner";
+import { api, apiRequest } from "@/lib/api";
 
 export const Route = createFileRoute("/dashboard/notifications")({
   head: () => ({ meta: [{ title: "Notifications - Factrova" }] }),
@@ -30,8 +32,33 @@ function Notifications() {
     Invoice: true,
   });
 
-  const toggle = (label: string) => {
-    setSettings((current) => ({ ...current, [label]: !current[label] }));
+  const load = async () => {
+    try {
+      const data = await api.list<{ label: string; enabled: boolean }>("notifications");
+      setSettings((current) => ({
+        ...current,
+        ...Object.fromEntries((data ?? []).map((row) => [row.label, row.enabled])),
+      }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to load notifications");
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const toggle = async (audience: string, label: string) => {
+    const enabled = !settings[label];
+    setSettings((current) => ({ ...current, [label]: enabled }));
+    try {
+      await apiRequest("/notifications", {
+        method: "PUT",
+        body: { audience, label, enabled },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update notification");
+    }
   };
 
   return (
@@ -42,14 +69,14 @@ function Notifications() {
           icon={Bell}
           options={adminOptions}
           settings={settings}
-          onToggle={toggle}
+          onToggle={(label) => toggle("admin", label)}
         />
         <NotificationSection
           title="Customers"
           icon={Users}
           options={customerOptions}
           settings={settings}
-          onToggle={toggle}
+          onToggle={(label) => toggle("customer", label)}
         />
       </div>
     </DashboardLayout>

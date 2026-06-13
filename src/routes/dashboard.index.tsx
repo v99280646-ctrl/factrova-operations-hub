@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
@@ -15,7 +16,15 @@ import {
   YAxis,
 } from "recharts";
 import { FolderKanban, Activity, CheckCircle2, IndianRupee, ArrowUpRight } from "lucide-react";
-import { projects, revenueByMonth, projectsByStatus } from "@/lib/data";
+import {
+  projects as initialProjects,
+  revenueByMonth as initialRevenueByMonth,
+  type Project,
+  type ProjectStatus,
+} from "@/lib/data";
+import { toast } from "sonner";
+import { api } from "@/lib/api";
+import { formatDateTimeCompact } from "@/lib/date-format";
 
 export const Route = createFileRoute("/dashboard/")({
   head: () => ({ meta: [{ title: "Overview — Factrova" }] }),
@@ -25,10 +34,70 @@ export const Route = createFileRoute("/dashboard/")({
 const PIE_COLORS = ["oklch(0.52 0.23 287)", "oklch(0.65 0.16 155)", "oklch(0.78 0.16 75)"];
 
 export function Overview() {
+  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [revenueByMonth, setRevenueByMonth] = useState(initialRevenueByMonth);
   const total = projects.length;
   const active = projects.filter((p) => p.status === "ongoing").length;
   const done = projects.filter((p) => p.status === "completed").length;
   const revenue = projects.filter((p) => p.status === "completed").reduce((s, p) => s + p.amount, 0);
+  const projectsByStatus = [
+    { name: "Ongoing", value: projects.filter((project) => project.status === "ongoing").length },
+    { name: "Completed", value: projects.filter((project) => project.status === "completed").length },
+    { name: "Hold", value: projects.filter((project) => project.status === "hold").length },
+  ];
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [projectRows, transactionRows] = await Promise.all([
+          api.list<{
+            id: string;
+            code: string;
+            name: string;
+            customerName: string;
+            status: ProjectStatus;
+            progress: number;
+            delivery?: string | null;
+            amount: number;
+            createdAt?: string;
+          }>("projects"),
+          api.list<{
+            transactionDate: string;
+            type: "credit" | "debit";
+            amount: number;
+          }>("transactions", { type: "credit" }),
+        ]);
+      setProjects(
+        (projectRows ?? []).map((row) => ({
+          id: row.code,
+          name: row.name,
+          customer: row.customerName,
+          status: row.status as ProjectStatus,
+          progress: row.progress,
+          delivery: row.delivery ?? "TBD",
+          amount: Number(row.amount),
+        })),
+      );
+      const revenueRows = transactionRows?.length
+        ? buildRevenueByMonth(
+            transactionRows.map((row) => ({
+              date: row.transactionDate,
+              amount: Number(row.amount),
+            })),
+          )
+        : buildRevenueByMonth(
+            (projectRows ?? []).map((row) => ({
+              date: row.delivery ?? row.createdAt,
+              amount: Number(row.amount),
+            })),
+          );
+      setRevenueByMonth(revenueRows);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to load overview");
+      }
+    };
+    load();
+  }, []);
 
   const stats = [
     { label: "Total Projects", value: total, icon: FolderKanban, delta: "+12%" },
@@ -149,7 +218,7 @@ export function Overview() {
                         <span className="text-xs text-muted-foreground">{p.progress}%</span>
                       </div>
                     </td>
-                    <td className="px-3 py-3 text-muted-foreground">{p.delivery}</td>
+                    <td className="px-3 py-3 text-muted-foreground">{formatDateTimeCompact(p.delivery)}</td>
                     <td className="px-3 py-3 text-right font-semibold">₹{p.amount.toLocaleString("en-IN")}</td>
                   </tr>
                 ))}
@@ -160,4 +229,28 @@ export function Overview() {
       </Card>
     </DashboardLayout>
   );
+}
+
+function buildRevenueByMonth(rows: { date?: string | null; amount: number }[]) {
+  const monthTotals = rows.reduce<Record<string, { month: string; revenue: number; sort: number }>>((totals, row) => {
+    const date = row.date ? new Date(row.date) : null;
+    if (!date || Number.isNaN(date.getTime())) return totals;
+
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const month = new Intl.DateTimeFormat("en", {
+      month: "short",
+      year: "2-digit",
+    }).format(date);
+
+    totals[key] = {
+      month,
+      revenue: (totals[key]?.revenue ?? 0) + row.amount,
+      sort: date.getFullYear() * 100 + date.getMonth(),
+    };
+    return totals;
+  }, {});
+
+  return Object.values(monthTotals)
+    .sort((a, b) => a.sort - b.sort)
+    .map(({ month, revenue }) => ({ month, revenue }));
 }

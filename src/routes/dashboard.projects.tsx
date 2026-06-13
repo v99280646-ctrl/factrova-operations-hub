@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -57,10 +58,20 @@ import {
 } from "lucide-react";
 import { ChevronDown } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
-import { projects as initial, type Project, type ProjectStatus } from "@/lib/data";
+import {
+  projects as initial,
+  stock as initialStock,
+  type Project,
+  type ProjectStatus,
+  type StockItem,
+} from "@/lib/data";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { loadStoredServices, mergeServices } from "@/lib/project-services";
+import { loadStoredCustomers, mergeCustomers, saveStoredCustomers } from "@/lib/customer-store";
+import { api, apiRequest } from "@/lib/api";
+import { formatDateTimeCompact } from "@/lib/date-format";
+import { findWasteAssignment } from "@/lib/waste-assignment-store";
 
 export const Route = createFileRoute("/dashboard/projects")({
   head: () => ({ meta: [{ title: "Projects — Factrova" }] }),
@@ -69,6 +80,52 @@ export const Route = createFileRoute("/dashboard/projects")({
 
 type Customer = { id: string; company: string };
 type Service = { id: string; name: string };
+type ApiProject = {
+  id: string;
+  code: string;
+  name: string;
+  customerId?: string | null;
+  customerName: string;
+  workType: "own" | "job";
+  status: ProjectStatus;
+  progress: number;
+  delivery?: string | null;
+  amount: number;
+  notes?: string;
+  materials?: {
+    id: string;
+    source: MaterialSource;
+    stockItemId?: string | null;
+    materialName: string;
+    materialType: string;
+    thickness?: string;
+    quantity: number;
+    unit: string;
+  }[];
+  services?: {
+    id: string;
+    serviceId?: string | null;
+    serviceName: string;
+    unit?: string;
+  }[];
+  workflowStages?: {
+    id: string;
+    name: string;
+    completed: number;
+    total: number;
+    sortOrder: number;
+    materials?: {
+      id?: string;
+      projectMaterialId?: string | null;
+      stockItemId?: string | null;
+      materialName: string;
+      materialType: string;
+      requiredQuantity: number;
+      completedQuantity: number;
+      unit: string;
+    }[];
+  }[];
+};
 type ProjectAction = "view" | "update";
 type ProjectMaterialStock = {
   material: string;
@@ -81,44 +138,52 @@ type ProjectServiceUsage = {
   completed: number;
   total: number;
 };
+type ProjectDetailMaterial = ProjectMaterialStock & {
+  source: MaterialSource;
+};
+type ProjectWorkflowStage = ProjectServiceUsage["name"];
 type ProjectWasteMaterial = {
   id: string;
   material: string;
+  projectId?: string | null;
+  projectName?: string;
+  usedForProjectId?: string | null;
+  usedForProjectName?: string;
   size: string;
+  note?: string;
+};
+type ApiWasteMaterial = ProjectWasteMaterial & {
+  code: string;
+  project_id?: string | null;
+  project_name?: string | null;
+  used_for_project_id?: string | null;
+  used_for_project_name?: string | null;
 };
 
-const previewMaterials: ProjectMaterialStock[] = [
-  { material: "Plywood 18mm", required: 28, inStock: 30, unit: "sheets" },
-  { material: "Veneer - Teak", required: 28, inStock: 18, unit: "sheets" },
-  { material: "Edge Band - Walnut", required: 120, inStock: 40, unit: "meters" },
-  { material: "Hinges (soft-close)", required: 64, inStock: 12, unit: "pcs" },
-  { material: "Adhesive - Fevicol SH", required: 8, inStock: 9, unit: "kg" },
-];
-
-const previewServices: ProjectServiceUsage[] = [
-  { name: "Veneer Pressing", completed: 25, total: 28 },
-  { name: "Edge Banding", completed: 15, total: 28 },
-  { name: "Cutting", completed: 3, total: 28 },
-];
-
-const wasteUsed: ProjectWasteMaterial[] = [
-  { id: "WU-001", material: "Plywood offcut", size: "18mm - 2 x 3 ft" },
-  { id: "WU-002", material: "Veneer strip", size: "4 in x 8 ft" },
-];
-
-const wasteCreated: ProjectWasteMaterial[] = [
-  { id: "WC-001", material: "MDF trimming", size: "18mm - mixed" },
-  { id: "WC-002", material: "Edge band scrap", size: "Walnut - short rolls" },
-  { id: "WC-003", material: "Laminate offcut", size: "1.5 x 2 ft" },
-];
+function mapProjectWasteMaterial(row: ApiWasteMaterial): ProjectWasteMaterial {
+  const stored = findWasteAssignment({ backendId: row.id, code: row.code });
+  return {
+    id: row.code,
+    material: row.material,
+    projectId: row.projectId ?? row.project_id ?? stored?.projectId ?? null,
+    projectName: row.projectName || row.project_name || stored?.projectName || "",
+    usedForProjectId: row.usedForProjectId ?? row.used_for_project_id ?? stored?.usedForProjectId ?? null,
+    usedForProjectName: row.usedForProjectName || row.used_for_project_name || stored?.usedForProjectName || "",
+    size: row.size ?? "",
+    note: row.note ?? "",
+  };
+}
 
 function Projects() {
   const [list, setList] = useState<Project[]>(initial);
+  const [projectBackendIds, setProjectBackendIds] = useState<Record<string, string>>({});
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<ProjectStatus | "all">("all");
   const [open, setOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [previewProject, setPreviewProject] = useState<Project | null>(null);
+  const [editProject, setEditProject] = useState<ApiProject | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
   const [projectAction, setProjectAction] = useState<ProjectAction>("view");
   const [loginRole, setLoginRole] = useState<"admin" | "employee">("admin");
   const employeeMode = loginRole === "employee";
@@ -134,24 +199,170 @@ function Projects() {
     setLoginRole(storedRole === "employee" ? "employee" : "admin");
   }, []);
 
-  const openProjectAction = (project: Project, action: ProjectAction) => {
+  const loadProjects = async () => {
+    let data: ApiProject[] = [];
+    try {
+      data = await api.list<ApiProject>("projects");
+    } catch (error) {
+      return toast.error(error instanceof Error ? error.message : "Unable to load projects");
+    }
+    setList(
+      (data ?? []).map((row) => ({
+        id: row.code,
+        name: row.name,
+        customer: row.customerName,
+        status: row.status as ProjectStatus,
+        progress: row.progress,
+        delivery: row.delivery ?? "TBD",
+        amount: Number(row.amount),
+      })),
+    );
+    setProjectBackendIds(
+      Object.fromEntries((data ?? []).map((row) => [row.code, row.id])),
+    );
+  };
+
+  useEffect(() => {
+    loadProjects();
+  }, []);
+
+  const openProjectAction = async (project: Project, action: ProjectAction) => {
     if (action === "view") {
       setPreviewProject({ ...project });
       return;
     }
-    setSelectedProject({ ...project });
-    setProjectAction(action);
+    const backendId = projectBackendIds[project.id];
+    if (!backendId) return toast.error("Project backend id missing");
+    setEditLoading(true);
+    try {
+      const detail = await api.get<ApiProject>("projects", backendId);
+      setEditProject(detail);
+      setProjectAction(action);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to load project");
+    } finally {
+      setEditLoading(false);
+    }
   };
 
-  const saveProjectUpdate = (project: Project) => {
+  const saveProjectUpdate = async (project: Project) => {
+    const backendId = projectBackendIds[project.id];
+    if (backendId) {
+      try {
+        await api.update<ApiProject>("projects", backendId, {
+          name: project.name,
+          customerName: project.customer,
+          status: project.status,
+          progress: project.progress,
+          delivery: project.delivery === "TBD" ? null : project.delivery,
+          amount: project.amount,
+        });
+      } catch (error) {
+        return toast.error(error instanceof Error ? error.message : "Unable to update project");
+      }
+    }
     setList((items) => items.map((item) => (item.id === project.id ? project : item)));
     setSelectedProject(null);
     toast.success("Project updated");
   };
 
-  const deleteProject = (project: Project) => {
+  const saveProjectEdit = async (project: ApiProject) => {
+    try {
+      let saved = await api.update<ApiProject>("projects", project.id, {
+        code: project.code,
+        name: project.name,
+        customerId: project.customerId || null,
+        customerName: project.customerName,
+        workType: project.workType,
+        status: project.status,
+        progress: Number(project.progress) || 0,
+        delivery: project.delivery || null,
+        amount: Number(project.amount) || 0,
+        notes: project.notes ?? "",
+        materials: (project.materials ?? []).map((material) => ({
+          _id: /^[0-9a-f]{24}$/i.test(material.id) ? material.id : undefined,
+          source: material.source,
+          stockItemId: material.stockItemId || null,
+          materialName: material.materialName,
+          materialType: material.materialType,
+          thickness: material.thickness ?? "",
+          quantity: Number(material.quantity) || 0,
+          unit: material.unit || "sheets",
+        })),
+        services: (project.services ?? []).map((service) => ({
+          _id: /^[0-9a-f]{24}$/i.test(service.id) ? service.id : undefined,
+          serviceId: service.serviceId || null,
+          serviceName: service.serviceName,
+          unit: service.unit ?? "",
+        })),
+      });
+      if (project.workflowStages?.length) {
+        saved = await apiRequest<ApiProject>(`/projects/${project.id}/workflow`, {
+          method: "PATCH",
+          body: {
+            stages: project.workflowStages.map((stage, index) => ({
+              _id: /^[0-9a-f]{24}$/i.test(stage.id) ? stage.id : undefined,
+              name: stage.name,
+              completed: Number(stage.completed) || 0,
+              total: Number(stage.total) || 0,
+              sortOrder: Number(stage.sortOrder) || index,
+              materials: (stage.materials ?? []).map((material) => ({
+                _id: "id" in material && typeof material.id === "string" && /^[0-9a-f]{24}$/i.test(material.id)
+                  ? material.id
+                  : undefined,
+                projectMaterialId: material.projectMaterialId || null,
+                stockItemId: material.stockItemId || null,
+                materialName: material.materialName,
+                materialType: material.materialType,
+                requiredQuantity: Number(material.requiredQuantity) || 0,
+                completedQuantity: Number(material.completedQuantity) || 0,
+                unit: material.unit || "sheets",
+              })),
+            })),
+          },
+        });
+      }
+      const row: Project = {
+        id: saved.code,
+        name: saved.name,
+        customer: saved.customerName,
+        status: saved.status,
+        progress: saved.progress,
+        delivery: saved.delivery ?? "TBD",
+        amount: Number(saved.amount),
+      };
+      setList((items) => items.map((item) => (item.id === project.code ? row : item)));
+      setProjectBackendIds((ids) => {
+        const next = { ...ids };
+        delete next[project.code];
+        next[saved.code] = saved.id;
+        return next;
+      });
+      setEditProject(null);
+      toast.success("Project updated");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update project");
+    }
+  };
+
+  const deleteProject = async (project: Project) => {
+    const backendId = projectBackendIds[project.id];
+    if (backendId) {
+      try {
+        await api.remove("projects", backendId);
+      } catch (error) {
+        return toast.error(error instanceof Error ? error.message : "Unable to delete project");
+      }
+    }
     setList((items) => items.filter((item) => item.id !== project.id));
     toast.success("Project deleted");
+  };
+
+  const addProject = (project: Project, backendId?: string) => {
+    setList((items) => [project, ...items]);
+    if (backendId) {
+      setProjectBackendIds((ids) => ({ ...ids, [project.id]: backendId }));
+    }
   };
 
   return (
@@ -222,7 +433,7 @@ function Projects() {
                         <span className="text-xs text-muted-foreground">{p.progress}%</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{p.delivery}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{formatDateTimeCompact(p.delivery)}</td>
                     <td className="px-4 py-3 text-right font-semibold">
                       ₹{p.amount.toLocaleString("en-IN")}
                     </td>
@@ -243,7 +454,7 @@ function Projects() {
                               View
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openProjectAction(p, "update")}>
-                              Update
+                              Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
@@ -278,13 +489,14 @@ function Projects() {
         <CreateProjectDialog
           open={open}
           onOpenChange={setOpen}
-          onCreate={(p) => setList((l) => [p, ...l])}
+          onCreate={addProject}
         />
       )}
 
       {!employeeMode && (
         <ProjectPreviewSheet
           project={previewProject}
+          backendId={previewProject ? projectBackendIds[previewProject.id] : undefined}
           onClose={() => setPreviewProject(null)}
         />
       )}
@@ -298,7 +510,315 @@ function Projects() {
           onSave={saveProjectUpdate}
         />
       )}
+
+      {!employeeMode && (
+        <ProjectEditDialog
+          action={projectAction}
+          project={editProject}
+          loading={editLoading}
+          onProjectChange={setEditProject}
+          onClose={() => setEditProject(null)}
+          onSave={saveProjectEdit}
+        />
+      )}
     </DashboardLayout>
+  );
+}
+
+function ProjectEditDialog({
+  action,
+  project,
+  loading,
+  onProjectChange,
+  onClose,
+  onSave,
+}: {
+  action: ProjectAction;
+  project: ApiProject | null;
+  loading: boolean;
+  onProjectChange: (project: ApiProject | null) => void;
+  onClose: () => void;
+  onSave: (project: ApiProject) => void;
+}) {
+  const update = <K extends keyof ApiProject>(key: K, value: ApiProject[K]) => {
+    onProjectChange(project ? { ...project, [key]: value } : project);
+  };
+  const updateMaterial = (
+    index: number,
+    key: NonNullable<ApiProject["materials"]>[number] extends infer T ? keyof T : never,
+    value: unknown,
+  ) => {
+    if (!project) return;
+    const materials = [...(project.materials ?? [])];
+    materials[index] = { ...materials[index], [key]: value };
+    onProjectChange({ ...project, materials });
+  };
+  const updateService = (
+    index: number,
+    key: NonNullable<ApiProject["services"]>[number] extends infer T ? keyof T : never,
+    value: unknown,
+  ) => {
+    if (!project) return;
+    const services = [...(project.services ?? [])];
+    services[index] = { ...services[index], [key]: value };
+    onProjectChange({ ...project, services });
+  };
+  const updateStage = (
+    index: number,
+    key: NonNullable<ApiProject["workflowStages"]>[number] extends infer T ? keyof T : never,
+    value: unknown,
+  ) => {
+    if (!project) return;
+    const workflowStages = [...(project.workflowStages ?? [])];
+    workflowStages[index] = { ...workflowStages[index], [key]: value };
+    onProjectChange({ ...project, workflowStages });
+  };
+
+  const addMaterial = () => {
+    if (!project) return;
+    onProjectChange({
+      ...project,
+      materials: [
+        ...(project.materials ?? []),
+        {
+          id: crypto.randomUUID(),
+          source: "new-stock",
+          stockItemId: null,
+          materialName: "New Material",
+          materialType: "MDF",
+          thickness: "",
+          quantity: 0,
+          unit: "sheets",
+        },
+      ],
+    });
+  };
+  const addService = () => {
+    if (!project) return;
+    onProjectChange({
+      ...project,
+      services: [
+        ...(project.services ?? []),
+        { id: crypto.randomUUID(), serviceId: null, serviceName: "New Service", unit: "sheet" },
+      ],
+    });
+  };
+  const addStage = () => {
+    if (!project) return;
+    onProjectChange({
+      ...project,
+      workflowStages: [
+        ...(project.workflowStages ?? []),
+        {
+          id: crypto.randomUUID(),
+          name: "New Stage",
+          completed: 0,
+          total: 0,
+          sortOrder: project.workflowStages?.length ?? 0,
+          materials: [],
+        },
+      ],
+    });
+  };
+
+  return (
+    <Dialog open={Boolean(project) || loading} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="left-auto right-0 top-0 flex h-dvh max-h-dvh w-full translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-y-0 border-r-0 p-0 sm:max-w-5xl sm:rounded-none">
+        <DialogHeader className="border-b border-border bg-background px-5 py-4 pr-12 sm:px-6">
+          <DialogTitle className="text-base">{action === "update" ? "Edit project" : "Project"}</DialogTitle>
+          <p className="text-sm text-muted-foreground">
+            {project ? `${project.code} - ${project.customerName || "No customer"}` : "Loading project"}
+          </p>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto bg-muted/20 px-4 py-4 sm:px-6">
+          {loading && <p className="py-10 text-center text-sm text-muted-foreground">Loading project...</p>}
+          {project && (
+            <div className="mx-auto max-w-4xl space-y-4">
+              <section className="rounded-lg border border-border bg-background shadow-sm">
+                <div className="border-b border-border px-4 py-3">
+                  <h3 className="text-sm font-semibold">Project Details</h3>
+                </div>
+                <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label>Project Code</Label>
+                    <Input value={project.code} onChange={(e) => update("code", e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Work Type</Label>
+                    <Select value={project.workType} onValueChange={(value) => update("workType", value as "own" | "job")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="own">Own Work</SelectItem>
+                        <SelectItem value="job">Job Work</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Status</Label>
+                    <Select value={project.status} onValueChange={(value) => update("status", value as ProjectStatus)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ongoing">Ongoing</SelectItem>
+                        <SelectItem value="completed">Completed</SelectItem>
+                        <SelectItem value="hold">On hold</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label>Project Name</Label>
+                    <Input value={project.name} onChange={(e) => update("name", e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Customer</Label>
+                    <Input value={project.customerName} onChange={(e) => update("customerName", e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Progress</Label>
+                    <Input type="number" min={0} max={100} value={project.progress} onChange={(e) => update("progress", Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Delivery</Label>
+                    <Input value={project.delivery ?? ""} placeholder="25 JUN 26 05:30" onChange={(e) => update("delivery", e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Amount</Label>
+                    <Input type="number" min={0} value={project.amount} onChange={(e) => update("amount", Number(e.target.value))} />
+                  </div>
+                  <div className="space-y-1.5 lg:col-span-3">
+                    <Label>Notes</Label>
+                    <Textarea className="min-h-20" value={project.notes ?? ""} onChange={(e) => update("notes", e.target.value)} />
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-border bg-background shadow-sm">
+                <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+                  <h3 className="text-sm font-semibold">Materials</h3>
+                  <Button type="button" variant="outline" size="sm" onClick={addMaterial}>
+                    <Plus className="mr-1 h-4 w-4" /> Add
+                  </Button>
+                </div>
+                <div className="space-y-3 p-4">
+                  {(project.materials ?? []).map((material, index) => (
+                    <div key={material.id ?? index} className="grid gap-3 rounded-md border border-border/70 bg-muted/20 p-3 lg:grid-cols-[1.4fr_1fr_1fr_100px_120px_40px]">
+                      <div className="space-y-1.5">
+                        <Label>Material</Label>
+                        <Input value={material.materialName} onChange={(e) => updateMaterial(index, "materialName", e.target.value)} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Type</Label>
+                        <Input value={material.materialType} onChange={(e) => updateMaterial(index, "materialType", e.target.value)} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Thickness</Label>
+                        <Input value={material.thickness ?? ""} onChange={(e) => updateMaterial(index, "thickness", e.target.value)} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Qty</Label>
+                        <Input type="number" min={0} value={material.quantity} onChange={(e) => updateMaterial(index, "quantity", Number(e.target.value))} />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Unit</Label>
+                        <Input value={material.unit} onChange={(e) => updateMaterial(index, "unit", e.target.value)} />
+                      </div>
+                      <div className="flex items-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={(project.materials ?? []).length <= 1}
+                          onClick={() =>
+                            onProjectChange({
+                              ...project,
+                              materials: (project.materials ?? []).filter((_, i) => i !== index),
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-lg border border-border bg-background shadow-sm">
+                  <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+                    <h3 className="text-sm font-semibold">Services Used</h3>
+                    <Button type="button" variant="outline" size="sm" onClick={addService}>
+                      <Plus className="mr-1 h-4 w-4" /> Add
+                    </Button>
+                  </div>
+                  <div className="space-y-2 p-4">
+                    {(project.services ?? []).map((service, index) => (
+                      <div key={service.id ?? index} className="grid grid-cols-[1fr_100px_40px] gap-2">
+                        <Input value={service.serviceName} onChange={(e) => updateService(index, "serviceName", e.target.value)} />
+                        <Input value={service.unit ?? ""} onChange={(e) => updateService(index, "unit", e.target.value)} />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            onProjectChange({
+                              ...project,
+                              services: (project.services ?? []).filter((_, i) => i !== index),
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {(project.services ?? []).length === 0 && (
+                      <p className="text-sm text-muted-foreground">No services added.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border bg-background shadow-sm">
+                  <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+                    <h3 className="text-sm font-semibold">Workflow Progress</h3>
+                    <Button type="button" variant="outline" size="sm" onClick={addStage}>
+                      <Plus className="mr-1 h-4 w-4" /> Add
+                    </Button>
+                  </div>
+                  <div className="space-y-2 p-4">
+                    {(project.workflowStages ?? []).map((stage, index) => (
+                      <div key={stage.id ?? index} className="grid gap-2 rounded-md border border-border/70 bg-muted/20 p-2 sm:grid-cols-[1fr_86px_86px_40px]">
+                        <Input value={stage.name} onChange={(e) => updateStage(index, "name", e.target.value)} />
+                        <Input type="number" min={0} value={stage.completed} onChange={(e) => updateStage(index, "completed", Number(e.target.value))} />
+                        <Input type="number" min={0} value={stage.total} onChange={(e) => updateStage(index, "total", Number(e.target.value))} />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            onProjectChange({
+                              ...project,
+                              workflowStages: (project.workflowStages ?? []).filter((_, i) => i !== index),
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {(project.workflowStages ?? []).length === 0 && (
+                      <p className="text-sm text-muted-foreground">No workflow stages added.</p>
+                    )}
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="border-t border-border bg-background px-5 py-4 sm:px-6">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          {project && <Button onClick={() => onSave(project)}>Save Project</Button>}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -412,11 +932,17 @@ function ProjectActionDialog({
 
 function ProjectPreviewSheet({
   project,
+  backendId,
   onClose,
 }: {
   project: Project | null;
+  backendId?: string;
   onClose: () => void;
 }) {
+  const [detailMaterials, setDetailMaterials] = useState<ProjectDetailMaterial[]>([]);
+  const [detailStages, setDetailStages] = useState<ProjectServiceUsage[]>([]);
+  const [createdWaste, setCreatedWaste] = useState<ProjectWasteMaterial[]>([]);
+  const [usedWaste, setUsedWaste] = useState<ProjectWasteMaterial[]>([]);
   const createdDate = "2026-03-10";
   const progressTone =
     project?.progress && project.progress >= 70
@@ -424,6 +950,84 @@ function ProjectPreviewSheet({
       : project?.progress && project.progress >= 40
         ? "bg-sky-500"
         : "bg-amber-500";
+  const visibleProductionStages = detailStages;
+  const visibleMaterials = detailMaterials;
+
+  useEffect(() => {
+    if (!backendId) {
+      setDetailMaterials([]);
+      setDetailStages([]);
+      setCreatedWaste([]);
+      setUsedWaste([]);
+      return;
+    }
+
+    let active = true;
+    const loadDetails = async () => {
+      let detail: ApiProject;
+      let stockRows: StockItem[] = [];
+      let wasteRows: ApiWasteMaterial[] = [];
+      try {
+        [detail, stockRows, wasteRows] = await Promise.all([
+          api.get<ApiProject>("projects", backendId),
+          api.list<StockItem>("stock"),
+          api.list<ApiWasteMaterial>("waste"),
+        ]);
+      } catch {
+        return;
+      }
+      if (!active) return;
+
+      const stockById = new Map((stockRows ?? []).map((row) => [row.id, row]));
+      const findStock = (material: NonNullable<ApiProject["materials"]>[number]) => {
+        if (material.stockItemId && stockById.has(material.stockItemId)) {
+          return stockById.get(material.stockItemId);
+        }
+        return (stockRows ?? []).find(
+          (row) =>
+            row.material.toLowerCase() === material.materialName.toLowerCase() ||
+            row.type.toLowerCase() === material.materialType.toLowerCase(),
+        );
+      };
+
+      setDetailMaterials(
+        (detail.materials ?? []).map((row) => {
+          const stockItem = findStock(row);
+          return {
+            material: row.materialName || row.materialType,
+            required: Number(row.quantity),
+            inStock: Number(stockItem?.quantity ?? 0),
+            unit: stockItem?.unit ?? row.unit,
+            source: row.source as MaterialSource,
+          };
+        }),
+      );
+      setDetailStages(
+        (detail.workflowStages ?? []).map((row) => ({
+          name: row.name,
+          completed: Number(row.completed),
+          total: Number(row.total) || 1,
+        })),
+      );
+      const matchesCurrentProject = (projectId?: string | null, projectName?: string) =>
+        projectId === backendId || (projectName ?? "").startsWith(`${detail.code} -`);
+      const wasteMaterials = (wasteRows ?? []).map(mapProjectWasteMaterial);
+
+      setCreatedWaste(
+        wasteMaterials.filter((row) => matchesCurrentProject(row.projectId, row.projectName)),
+      );
+      setUsedWaste(
+        wasteMaterials.filter((row) =>
+          matchesCurrentProject(row.usedForProjectId, row.usedForProjectName),
+        ),
+      );
+    };
+
+    loadDetails();
+    return () => {
+      active = false;
+    };
+  }, [backendId]);
 
   return (
     <Sheet open={Boolean(project)} onOpenChange={(open) => !open && onClose()}>
@@ -442,8 +1046,8 @@ function ProjectPreviewSheet({
                   <StatusBadge status={project.status} />
                 </div>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {project.id} - Created {formatDate(createdDate)} - Delivery{" "}
-                  {formatDate(project.delivery)}
+                  {project.id} - Created {formatDateTimeCompact(createdDate)} - Delivery{" "}
+                  {formatDateTimeCompact(project.delivery)}
                 </p>
               </div>
               <div className="sm:text-right">
@@ -456,7 +1060,35 @@ function ProjectPreviewSheet({
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
+              <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+                <UserRound className="h-4 w-4" />
+                Customer details
+              </h3>
+              <div className="flex items-center gap-3 border-b border-border pb-4">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-sm font-semibold">
+                  {project.customer
+                    .split(" ")
+                    .map((part) => part[0])
+                    .join("")
+                    .slice(0, 2)}
+                </div>
+                <div>
+                  <p className="font-semibold">{project.customer}</p>
+                  <p className="text-xs text-muted-foreground">Project customer</p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
+                <PreviewInfo icon={<Phone className="h-4 w-4" />} text="Phone not added" />
+                <PreviewInfo icon={<Mail className="h-4 w-4" />} text="Email not added" />
+                <PreviewInfo
+                  icon={<MapPin className="h-4 w-4" />}
+                  text="Address not added"
+                />
+              </div>
+            </section>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-3">
               <PreviewCard
                 icon={<ChartLine className="h-4 w-4" />}
                 label="Overall progress"
@@ -468,54 +1100,32 @@ function ProjectPreviewSheet({
               <PreviewCard
                 icon={<CalendarDays className="h-4 w-4" />}
                 label="Created"
-                value={formatDate(createdDate)}
+                value={formatDateTimeCompact(createdDate)}
                 helper="Start of production"
               />
               <PreviewCard
                 icon={<CalendarDays className="h-4 w-4" />}
                 label="Delivery"
-                value={formatDate(project.delivery)}
+                value={formatDateTimeCompact(project.delivery)}
                 helper="27 days remaining"
               />
             </div>
 
-            <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.4fr]">
-              <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
-                <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
-                  <UserRound className="h-4 w-4" />
-                  Customer details
-                </h3>
-                <div className="flex items-center gap-3 border-b border-border pb-4">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-sm font-semibold">
-                    {project.customer
-                      .split(" ")
-                      .map((part) => part[0])
-                      .join("")
-                      .slice(0, 2)}
-                  </div>
-                  <div>
-                    <p className="font-semibold">{project.customer}</p>
-                    <p className="text-xs text-muted-foreground">Project customer</p>
-                  </div>
-                </div>
-                <div className="mt-4 space-y-2 text-sm">
-                  <PreviewInfo icon={<Phone className="h-4 w-4" />} text="+91 98765 43210" />
-                  <PreviewInfo icon={<Mail className="h-4 w-4" />} text="projects@example.com" />
-                  <PreviewInfo
-                    icon={<MapPin className="h-4 w-4" />}
-                    text="B-204, Green Park, New Delhi, 110016"
-                  />
-                </div>
-              </section>
-
+            <div className="mt-4">
               <section className="rounded-lg border border-border bg-card p-4 shadow-sm">
                 <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
                   <CircleDollarSign className="h-4 w-4" />
-                  Services used
+                  Production progress
                 </h3>
                 <div className="space-y-4">
-                  {previewServices.map((service) => {
-                    const percent = Math.round((service.completed / service.total) * 100);
+                  {visibleProductionStages.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No production stages added.</p>
+                  )}
+                  {visibleProductionStages.map((service) => {
+                    const percent = Math.min(
+                      100,
+                      Math.round((service.completed / service.total) * 100),
+                    );
                     return (
                       <div key={service.name}>
                         <div className="mb-2 flex items-center justify-between gap-3 text-xs">
@@ -547,17 +1157,26 @@ function ProjectPreviewSheet({
                   <thead>
                     <tr className="border-b border-border text-left text-xs text-muted-foreground">
                       <th className="px-2 py-2 font-medium">Material</th>
+                      <th className="px-2 py-2 text-right font-medium">Required</th>
                       <th className="px-2 py-2 text-right font-medium">In stock</th>
                       <th className="px-2 py-2 font-medium">Unit</th>
                       <th className="px-2 py-2 text-right font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {previewMaterials.map((row) => {
+                    {visibleMaterials.length === 0 && (
+                      <tr>
+                        <td colSpan={5} className="px-2 py-6 text-center text-sm text-muted-foreground">
+                          No materials added.
+                        </td>
+                      </tr>
+                    )}
+                    {visibleMaterials.map((row) => {
                       const sufficient = row.inStock >= row.required;
                       return (
                         <tr key={row.material} className="border-b border-border/70 last:border-0">
                           <td className="px-2 py-2 font-medium">{row.material}</td>
+                          <td className="px-2 py-2 text-right">{row.required}</td>
                           <td className="px-2 py-2 text-right">{row.inStock}</td>
                           <td className="px-2 py-2 text-muted-foreground">{row.unit}</td>
                           <td className="px-2 py-2 text-right">
@@ -587,8 +1206,16 @@ function ProjectPreviewSheet({
                 Waste Material stock
               </h3>
               <div className="grid gap-4 lg:grid-cols-2">
-                <WasteMaterialSection title="Waste Used" rows={wasteUsed} />
-                <WasteMaterialSection title="Waste Created" rows={wasteCreated} />
+                <WasteMaterialSection
+                  emptyText="No waste materials created from this project."
+                  rows={createdWaste}
+                  title="Created Waste"
+                />
+                <WasteMaterialSection
+                  emptyText="No waste materials used for this project."
+                  rows={usedWaste}
+                  title="Used Waste"
+                />
               </div>
             </section>
 
@@ -598,30 +1225,9 @@ function ProjectPreviewSheet({
                   <UsersRound className="h-4 w-4" />
                   Assigned employees
                 </h3>
-                <Badge variant="secondary">5 members</Badge>
+                <Badge variant="secondary">0 members</Badge>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {[
-                  ["AV", "Anil Verma", "Project Lead"],
-                  ["SK", "Suresh Kumar", "Veneer Pressing"],
-                  ["MY", "Manoj Yadav", "Edge Banding"],
-                  ["IS", "Imran Sheikh", "Cutting"],
-                  ["DS", "Deepak Singh", "Material Handling"],
-                ].map(([initials, name, role]) => (
-                  <div key={name} className="flex items-center gap-3 rounded-lg border border-border p-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                      {initials}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold">{name}</p>
-                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Cuboid className="h-3 w-3" />
-                        {role}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <p className="text-sm text-muted-foreground">No employees assigned.</p>
             </section>
           </div>
         )}
@@ -657,9 +1263,11 @@ function PreviewCard({
 }
 
 function WasteMaterialSection({
+  emptyText,
   title,
   rows,
 }: {
+  emptyText: string;
   title: string;
   rows: ProjectWasteMaterial[];
 }) {
@@ -676,14 +1284,23 @@ function WasteMaterialSection({
               <th className="px-3 py-2 font-medium">ID</th>
               <th className="px-3 py-2 font-medium">Material</th>
               <th className="px-3 py-2 font-medium">Size</th>
+              <th className="px-3 py-2 font-medium">Note</th>
             </tr>
           </thead>
           <tbody>
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-sm text-muted-foreground">
+                  {emptyText}
+                </td>
+              </tr>
+            )}
             {rows.map((row) => (
               <tr key={row.id} className="border-b border-border/70 last:border-0">
                 <td className="px-3 py-2 font-medium">{row.id}</td>
                 <td className="px-3 py-2">{row.material}</td>
-                <td className="px-3 py-2 text-muted-foreground">{row.size}</td>
+                <td className="px-3 py-2 text-muted-foreground">{row.size || "-"}</td>
+                <td className="px-3 py-2 text-muted-foreground">{row.note || "-"}</td>
               </tr>
             ))}
           </tbody>
@@ -716,28 +1333,46 @@ function serviceProgressColor(value: number) {
   return "bg-amber-500";
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  }).format(new Date(value));
-}
-
 const STEPS = ["Basic info", "Materials", "Services", "Summary"] as const;
 
-type MaterialRow = { id: string; type: string; size: string; sheets: number };
+type MaterialSource = "inventory" | "new-stock";
+type MaterialRow = {
+  id: string;
+  type: string;
+  thickness: string;
+  sheets: number;
+  source: MaterialSource;
+  stockId?: string;
+  materialName?: string;
+  unit?: string;
+};
 
-const MATERIAL_TYPES = ["MDF", "Plywood", "Particle Board", "HDHMR", "BWP Ply"];
-const SHEET_SIZES = ["8 × 4 ft", "7 × 4 ft", "6 × 4 ft"];
+const MATERIAL_TYPES = ["MDF", "Plywood", "Particle Board", "HDHMR", "Multi Wood", "WPC"];
+const THICKNESS_OPTIONS = Array.from({ length: 40 }, (_, i) => `${i + 1}mm`);
 
 function newMaterial(): MaterialRow {
   return {
     id: crypto.randomUUID(),
     type: "MDF",
-    size: "8 × 4 ft",
+    thickness: "1mm",
     sheets: 0,
+    source: "new-stock",
   };
+}
+
+function makeProjectCode() {
+  return `P${Date.now().toString().slice(-6)}`;
+}
+
+function serviceToWorkflowStage(serviceName: string) {
+  const name = serviceName.toLowerCase();
+  if (name.includes("press")) return "Pressing";
+  if (name.includes("cut")) return "Cutting";
+  if (name.includes("edge")) return "Edge band";
+  if (name.includes("bor")) return "Boring";
+  if (name.includes("pack")) return "Packing";
+  if (name.includes("deliver")) return "Deliverd";
+  return serviceName;
 }
 
 function CreateProjectDialog({
@@ -747,13 +1382,23 @@ function CreateProjectDialog({
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onCreate: (p: Project) => void;
+  onCreate: (p: Project, backendId?: string) => void;
 }) {
   const [step, setStep] = useState(0);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [inventoryStock, setInventoryStock] = useState<StockItem[]>(initialStock);
   const [addCustOpen, setAddCustOpen] = useState(false);
   const [advancedCustomerOpen, setAdvancedCustomerOpen] = useState(false);
+  const [materialStage, setMaterialStage] = useState<MaterialSource>("new-stock");
+  const [inventoryOpen, setInventoryOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [customMaterialTypes, setCustomMaterialTypes] = useState<string[]>([]);
+  const [materialTypeDialog, setMaterialTypeDialog] = useState<{
+    open: boolean;
+    rowId: string | null;
+    value: string;
+  }>({ open: false, rowId: null, value: "" });
   const [newCust, setNewCust] = useState({
     company: "",
     contact: "",
@@ -775,12 +1420,39 @@ function CreateProjectDialog({
   });
 
   const loadLookups = async () => {
-    const [{ data: cs }, { data: ss }] = await Promise.all([
-      supabase.from("customers").select("id, company").order("company"),
-      supabase.from("services").select("id, name").order("name"),
-    ]);
-    setCustomers((cs ?? []) as Customer[]);
-    setServices((ss ?? []) as Service[]);
+    const localServices = loadStoredServices();
+    try {
+      const [cs, ss, stockRows] = await Promise.all([
+        api.list<Customer>("customers"),
+        api.list<Service & { price?: number; unit?: string }>("services"),
+        api.list<StockItem>("stock"),
+      ]);
+      setCustomers(mergeCustomers((cs ?? []) as Customer[], loadStoredCustomers()));
+      setInventoryStock(
+        stockRows?.map((row) => ({
+          id: row.id,
+          material: row.material,
+          type: row.type,
+          quantity: Number(row.quantity),
+          unit: row.unit,
+        })) ?? initialStock,
+      );
+      const mergedServices = mergeServices(
+        ((ss ?? []) as (Service & { price?: number; unit?: string })[]).map((service) => ({
+          id: service.id,
+          name: service.name,
+          price: service.price ?? 0,
+          unit: service.unit ?? "sheet",
+        })),
+        localServices,
+      );
+      setServices(mergedServices.map(({ id, name }) => ({ id, name })));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Using locally stored lookups");
+      setCustomers(mergeCustomers(loadStoredCustomers()));
+      setInventoryStock(initialStock);
+      setServices(localServices.map(({ id, name }) => ({ id, name })));
+    }
   };
 
   useEffect(() => {
@@ -789,6 +1461,8 @@ function CreateProjectDialog({
 
   const reset = () => {
     setStep(0);
+    setCreating(false);
+    setMaterialStage("new-stock");
     setData({
       workType: "own",
       customer: "",
@@ -801,27 +1475,66 @@ function CreateProjectDialog({
   };
 
   const totalSheets = data.materials.reduce((s, m) => s + (Number(m.sheets) || 0), 0);
+  const validMaterials = data.materials.filter((material) => Number(material.sheets) > 0);
+  const inventoryMaterials = data.materials.filter((material) => material.source === "inventory");
+  const newStockMaterials = data.materials.filter((material) => material.source === "new-stock");
+  const materialTypeOptions = [...MATERIAL_TYPES, ...customMaterialTypes];
 
   const addCustomer = async () => {
     if (!newCust.company.trim()) return toast.error("Company name required");
-    const { data: row, error } = await supabase
-      .from("customers")
-      .insert({
+    const localCustomer: Customer = {
+      id: crypto.randomUUID(),
+      company: newCust.company.trim(),
+    };
+    const nextCustomers = mergeCustomers([...customers, localCustomer]);
+    setCustomers(nextCustomers);
+    saveStoredCustomers(
+      nextCustomers.map((customer) => ({
+        id: customer.id,
+        company: customer.company,
+        contact: "",
+        phone: "",
+        email: "",
+        address: "",
+        state: "",
+        district: "",
+        pincode: "",
+        gstin: "",
+      })),
+    );
+    setData((d) => ({ ...d, customer: localCustomer.company }));
+    try {
+      const row = await api.create<Customer>("customers", {
         company: newCust.company.trim(),
-        contact: newCust.contact.trim() || null,
-        phone: newCust.phone.trim() || null,
-        address: newCust.address.trim() || null,
-        state: newCust.state.trim() || null,
-        district: newCust.district.trim() || null,
-        pincode: newCust.pincode.trim() || null,
-        gstin: newCust.gstin.trim() || null,
-      })
-      .select("id, company")
-      .single();
-    if (error) return toast.error(error.message);
+        contact: newCust.contact.trim(),
+        phone: newCust.phone.trim(),
+        address: newCust.address.trim(),
+        state: newCust.state.trim(),
+        district: newCust.district.trim(),
+        pincode: newCust.pincode.trim(),
+        gstin: newCust.gstin.trim(),
+      });
+      const syncedCustomers = mergeCustomers(nextCustomers, [row as Customer]);
+      setCustomers(syncedCustomers);
+      saveStoredCustomers(
+        syncedCustomers.map((customer) => ({
+          id: customer.id,
+          company: customer.company,
+          contact: "",
+          phone: "",
+          email: "",
+          address: "",
+          state: "",
+          district: "",
+          pincode: "",
+          gstin: "",
+        })),
+      );
+      setData((d) => ({ ...d, customer: row.company }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Customer saved locally only");
+    }
     toast.success("Customer added");
-    setCustomers((c) => [...c, row as Customer]);
-    setData((d) => ({ ...d, customer: row!.company }));
     setNewCust({
       company: "",
       contact: "",
@@ -836,19 +1549,139 @@ function CreateProjectDialog({
     setAddCustOpen(false);
   };
 
-  const create = () => {
-    onCreate({
-      id: `P${Math.floor(Math.random() * 900 + 100)}`,
-      name: data.name || "Untitled project",
-      customer: data.customer || "—",
-      status: "ongoing",
-      progress: 5,
-      delivery: data.delivery || "TBD",
-      amount: 0,
-    });
-    toast.success("Project created");
-    onOpenChange(false);
-    reset();
+  const selectMaterialType = (rowId: string, value: string) => {
+    setData((d) => ({
+      ...d,
+      materials: d.materials.map((x) => (x.id === rowId ? { ...x, type: value } : x)),
+    }));
+  };
+
+  const saveMaterialType = () => {
+    const materialType = materialTypeDialog.value.trim();
+    if (!materialType) return toast.error("Material type required");
+    const existingType = materialTypeOptions.find(
+      (type) => type.toLowerCase() === materialType.toLowerCase(),
+    );
+    const selectedType = existingType ?? materialType;
+
+    setCustomMaterialTypes((types) =>
+      materialTypeOptions.some((type) => type.toLowerCase() === materialType.toLowerCase())
+        ? types
+        : [...types, materialType],
+    );
+    setData((d) => ({
+      ...d,
+      materials: d.materials.map((x) =>
+        x.id === materialTypeDialog.rowId ? { ...x, type: selectedType } : x,
+      ),
+    }));
+    setMaterialTypeDialog({ open: false, rowId: null, value: "" });
+    toast.success("Material type added");
+  };
+
+  const addInventoryMaterial = (item: StockItem) => {
+    const alreadyAdded = data.materials.some((material) => material.stockId === item.id);
+    if (alreadyAdded) return toast.error("Material already added");
+
+    setData((d) => ({
+      ...d,
+      materials: [
+        ...d.materials,
+        {
+          id: crypto.randomUUID(),
+          type: item.type,
+          thickness: item.material,
+          sheets: 1,
+          source: "inventory",
+          stockId: item.id,
+          materialName: item.material,
+          unit: item.unit,
+        },
+      ],
+    }));
+    toast.success("Material added");
+  };
+
+  const validateCurrentStep = () => {
+    if (step === 0) {
+      if (!data.customer.trim()) return "Select a customer";
+      if (!data.name.trim()) return "Project name required";
+    }
+    if (step === 1) {
+      if (!validMaterials.length) return "Add at least one material quantity";
+      const unavailable = validMaterials.find((material) => {
+        if (material.source !== "inventory" || !material.stockId) return false;
+        const stockItem = inventoryStock.find((item) => item.id === material.stockId);
+        return !stockItem || Number(material.sheets) > stockItem.quantity;
+      });
+      if (unavailable) return `${unavailable.materialName ?? unavailable.type} exceeds available stock`;
+    }
+    return "";
+  };
+
+  const create = async () => {
+    const validationError = validateCurrentStep();
+    if (validationError) return toast.error(validationError);
+
+    setCreating(true);
+    try {
+      const project: Project = {
+        id: makeProjectCode(),
+        name: data.name || "Untitled project",
+        customer: data.customer || "-",
+        status: "ongoing",
+        progress: 5,
+        delivery: data.delivery || "TBD",
+        amount: 0,
+      };
+      const selectedCustomer = customers.find((customer) => customer.company === data.customer);
+      const customerId = /^[0-9a-f]{24}$/i.test(selectedCustomer?.id ?? "") ? selectedCustomer?.id : null;
+      const projectRow = await api.create<ApiProject>("projects", {
+        name: project.name,
+        customerId,
+        customerName: project.customer,
+        workType: data.workType,
+        status: project.status,
+        progress: project.progress,
+        delivery: data.delivery || null,
+        amount: project.amount,
+        notes: data.notes.trim(),
+        materials: validMaterials.map((material) => ({
+          source: material.source,
+          stockItemId: material.stockId ?? null,
+          materialName:
+            material.materialName ??
+            (material.source === "new-stock" ? `${material.type} ${material.thickness}` : material.type),
+          materialType: material.type,
+          thickness: material.thickness,
+          quantity: material.sheets,
+          unit: material.unit ?? "sheets",
+        })),
+        services: services
+          .filter((service) => data.selectedServiceIds.includes(service.id))
+          .map((service) => ({
+            serviceId: /^[0-9a-f]{24}$/i.test(service.id) ? service.id : null,
+            serviceName: service.name,
+          })),
+      });
+      const savedProject: Project = {
+        id: projectRow.code,
+        name: projectRow.name,
+        customer: projectRow.customerName,
+        status: projectRow.status,
+        progress: projectRow.progress,
+        delivery: projectRow.delivery ?? "TBD",
+        amount: Number(projectRow.amount),
+      };
+      onCreate(savedProject, projectRow.id);
+      toast.success("Project created");
+      onOpenChange(false);
+      reset();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create project");
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
@@ -949,7 +1782,7 @@ function CreateProjectDialog({
                   <Input
                     value={data.name}
                     onChange={(e) => setData({ ...data, name: e.target.value })}
-                    placeholder="e.g. Sterling HQ Cabinets"
+                    placeholder="Enter project name"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -974,111 +1807,190 @@ function CreateProjectDialog({
 
             {step === 1 && (
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    Add one or more materials for this project.
-                  </p>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setData((d) => ({ ...d, materials: [...d.materials, newMaterial()] }))
-                    }
-                  >
-                    <Plus className="mr-1 h-4 w-4" /> Add material
-                  </Button>
-                </div>
-                <div className="space-y-2">
-                  {data.materials.map((m, idx) => (
-                    <div
-                      key={m.id}
-                      className="grid items-end gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-[1fr_1fr_120px_auto]"
-                    >
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Material type</Label>
-                        <Select
-                          value={m.type}
-                          onValueChange={(v) =>
-                            setData((d) => ({
-                              ...d,
-                              materials: d.materials.map((x) =>
-                                x.id === m.id ? { ...x, type: v } : x,
-                              ),
-                            }))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {MATERIAL_TYPES.map((t) => (
-                              <SelectItem key={t} value={t}>
-                                {t}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Size</Label>
-                        <Select
-                          value={m.size}
-                          onValueChange={(v) =>
-                            setData((d) => ({
-                              ...d,
-                              materials: d.materials.map((x) =>
-                                x.id === m.id ? { ...x, size: v } : x,
-                              ),
-                            }))
-                          }
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {SHEET_SIZES.map((s) => (
-                              <SelectItem key={s} value={s}>
-                                {s}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">Sheets</Label>
-                        <Input
-                          type="number"
-                          min={0}
-                          value={m.sheets || ""}
-                          onChange={(e) =>
-                            setData((d) => ({
-                              ...d,
-                              materials: d.materials.map((x) =>
-                                x.id === m.id ? { ...x, sheets: Number(e.target.value) } : x,
-                              ),
-                            }))
-                          }
-                        />
-                      </div>
+                <Tabs
+                  value={materialStage}
+                  onValueChange={(value) => setMaterialStage(value as MaterialSource)}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <TabsList>
+                      <TabsTrigger value="inventory">Use inventry</TabsTrigger>
+                      <TabsTrigger value="new-stock">New Stock</TabsTrigger>
+                    </TabsList>
+                    {materialStage === "inventory" ? (
                       <Button
                         type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={data.materials.length === 1}
-                        onClick={() =>
-                          setData((d) => ({
-                            ...d,
-                            materials: d.materials.filter((x) => x.id !== m.id),
-                          }))
-                        }
-                        aria-label={`Remove material ${idx + 1}`}
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setInventoryOpen(true)}
                       >
-                        <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        <Plus className="mr-1 h-4 w-4" /> Add metrial
                       </Button>
-                    </div>
-                  ))}
-                </div>
+                    ) : (
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setMaterialTypeDialog({ open: true, rowId: null, value: "" })
+                          }
+                        >
+                          <Plus className="mr-1 h-4 w-4" /> New Material
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() =>
+                            setData((d) => ({ ...d, materials: [...d.materials, newMaterial()] }))
+                          }
+                        >
+                          <Plus className="mr-1 h-4 w-4" /> Add material
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  <TabsContent value="inventory" className="mt-3 space-y-2">
+                    {inventoryMaterials.length === 0 && (
+                      <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                        No inventory materials selected.
+                      </div>
+                    )}
+                    {inventoryMaterials.map((m, idx) => (
+                      <div
+                        key={m.id}
+                        className="grid items-end gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-[1fr_120px_90px_auto]"
+                      >
+                        <div>
+                          <Label className="text-xs">Inventory material</Label>
+                          <p className="mt-2 text-sm font-medium">{m.materialName ?? m.thickness}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {m.type} - Available{" "}
+                            {inventoryStock.find((item) => item.id === m.stockId)?.quantity ?? 0}{" "}
+                            {m.unit ?? "units"}
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Quantity</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={m.sheets || ""}
+                            onChange={(e) =>
+                              setData((d) => ({
+                                ...d,
+                                materials: d.materials.map((x) =>
+                                  x.id === m.id ? { ...x, sheets: Number(e.target.value) } : x,
+                                ),
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="pb-2 text-sm text-muted-foreground">{m.unit ?? "units"}</div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() =>
+                            setData((d) => ({
+                              ...d,
+                              materials: d.materials.filter((x) => x.id !== m.id),
+                            }))
+                          }
+                          aria-label={`Remove inventory material ${idx + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ))}
+                  </TabsContent>
+
+                  <TabsContent value="new-stock" className="mt-3 space-y-2">
+                    {newStockMaterials.map((m, idx) => (
+                      <div
+                        key={m.id}
+                        className="grid items-end gap-2 rounded-lg border border-border bg-card p-3 sm:grid-cols-[1fr_1fr_120px_auto]"
+                      >
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Material type</Label>
+                          <Select
+                            value={m.type}
+                            onValueChange={(v) => selectMaterialType(m.id, v)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {materialTypeOptions.map((t) => (
+                                <SelectItem key={t} value={t}>
+                                  {t}
+                                </SelectItem>
+                              ))}
+                              <SelectItem value="Other">Other</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Thickness</Label>
+                          <Select
+                            value={m.thickness}
+                            onValueChange={(v) =>
+                              setData((d) => ({
+                                ...d,
+                                materials: d.materials.map((x) =>
+                                  x.id === m.id ? { ...x, thickness: v } : x,
+                                ),
+                              }))
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {THICKNESS_OPTIONS.map((s) => (
+                                <SelectItem key={s} value={s}>
+                                  {s}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Sheets</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            value={m.sheets || ""}
+                            onChange={(e) =>
+                              setData((d) => ({
+                                ...d,
+                                materials: d.materials.map((x) =>
+                                  x.id === m.id ? { ...x, sheets: Number(e.target.value) } : x,
+                                ),
+                              }))
+                            }
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          disabled={newStockMaterials.length === 1}
+                          onClick={() =>
+                            setData((d) => ({
+                              ...d,
+                              materials: d.materials.filter((x) => x.id !== m.id),
+                            }))
+                          }
+                          aria-label={`Remove material ${idx + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ))}
+                  </TabsContent>
+                </Tabs>
                 <p className="text-right text-sm text-muted-foreground">
                   Total sheets: <span className="font-semibold text-foreground">{totalSheets}</span>
                 </p>
@@ -1129,23 +2041,26 @@ function CreateProjectDialog({
                   <Row k="Work type" v={data.workType === "own" ? "Own Work" : "Job Work"} />
                   <Row k="Customer" v={data.customer || "—"} />
                   <Row k="Project" v={data.name || "—"} />
-                  <Row k="Delivery" v={data.delivery || "—"} />
-                  <Row k="Total sheets" v={String(totalSheets)} />
+                  <Row k="Delivery" v={data.delivery ? formatDateTimeCompact(data.delivery) : "—"} />
+                  <Row k="Material quantity" v={String(totalSheets)} />
                 </div>
                 <div className="rounded-lg border border-border bg-card">
                   <div className="border-b border-border px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Materials
                   </div>
                   <div className="divide-y divide-border">
-                    {data.materials.map((m) => (
+                    {validMaterials.map((m) => (
                       <div
                         key={m.id}
                         className="flex items-center justify-between px-4 py-2 text-sm"
                       >
                         <span>
-                          {m.type} <span className="text-muted-foreground">({m.size})</span>
+                          {m.materialName ?? m.type}{" "}
+                          <span className="text-muted-foreground">({m.thickness})</span>
                         </span>
-                        <span className="font-medium">{m.sheets} sheets</span>
+                        <span className="font-medium">
+                          {m.sheets} {m.unit ?? "sheets"}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -1180,12 +2095,111 @@ function CreateProjectDialog({
               </Button>
             )}
             {step < STEPS.length - 1 ? (
-              <Button onClick={() => setStep(step + 1)}>
+              <Button
+                type="button"
+                onClick={() => {
+                  const validationError = validateCurrentStep();
+                  if (validationError) return toast.error(validationError);
+                  setStep(step + 1);
+                }}
+              >
                 Next <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             ) : (
-              <Button onClick={create}>Create Order</Button>
+              <Button type="button" onClick={create} disabled={creating}>
+                {creating ? "Creating..." : "Create Order"}
+              </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick add material type */}
+      <Dialog
+        open={materialTypeDialog.open}
+        onOpenChange={(open) =>
+          setMaterialTypeDialog({
+            open,
+            rowId: open ? materialTypeDialog.rowId : null,
+            value: "",
+          })
+        }
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add material type</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label>Material type</Label>
+            <Input
+              value={materialTypeDialog.value}
+              onChange={(e) =>
+                setMaterialTypeDialog((current) => ({ ...current, value: e.target.value }))
+              }
+              placeholder="Enter material type"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setMaterialTypeDialog({ open: false, rowId: null, value: "" })}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={saveMaterialType}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={inventoryOpen} onOpenChange={setInventoryOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add metrial from inventry</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[420px] overflow-y-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">Material</th>
+                  <th className="px-4 py-3 font-medium">Type</th>
+                  <th className="px-4 py-3 text-right font-medium">Stock</th>
+                  <th className="px-4 py-3 text-right font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inventoryStock.map((item) => {
+                  const selected = data.materials.some((material) => material.stockId === item.id);
+                  return (
+                    <tr key={item.id} className="border-b border-border/50 last:border-0">
+                      <td className="px-4 py-3 font-medium">{item.material}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{item.type}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">
+                        {item.quantity} {item.unit}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={selected ? "secondary" : "outline"}
+                          disabled={selected}
+                          onClick={() => addInventoryMaterial(item)}
+                        >
+                          {selected ? "Added" : "Add"}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setInventoryOpen(false)}>
+              Done
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

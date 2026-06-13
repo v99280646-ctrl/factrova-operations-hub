@@ -20,17 +20,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2, Wrench } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { api } from "@/lib/api";
+import { type StoredService } from "@/lib/project-services";
 
 export const Route = createFileRoute("/dashboard/services")({
   head: () => ({ meta: [{ title: "Services — Factrova" }] }),
   component: Services,
 });
 
-type Service = { id: string; name: string; price: number; unit: string };
+type Service = StoredService;
 
-const UNITS = ["sheet", "meter", "hole", "piece", "kg", "hour"];
+const UNITS = ["sheet", "meter", "km", "hole", "piece", "kg", "hour"];
 
 function Services() {
   const [list, setList] = useState<Service[]>([]);
@@ -40,12 +41,12 @@ function Services() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("services")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error) toast.error(error.message);
-    else setList((data ?? []) as Service[]);
+    try {
+      const data = await api.list<Service>("services");
+      setList((data ?? []) as Service[]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to load services");
+    }
     setLoading(false);
   };
 
@@ -55,23 +56,35 @@ function Services() {
 
   const add = async () => {
     if (!form.name.trim()) return toast.error("Service name is required");
-    const { error } = await supabase.from("services").insert({
+    const service: Service = {
+      id: crypto.randomUUID(),
       name: form.name.trim(),
       price: Number(form.price) || 0,
       unit: form.unit,
-    });
-    if (error) return toast.error(error.message);
-    toast.success("Service added");
+    };
+    try {
+      const data = await api.create<Service>("services", {
+        name: service.name,
+        price: service.price,
+        unit: service.unit,
+      });
+      setList([data as Service, ...list]);
+      toast.success("Service added");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save service");
+    }
     setOpen(false);
     setForm({ name: "", price: "", unit: "sheet" });
-    load();
   };
 
   const remove = async (id: string) => {
-    const { error } = await supabase.from("services").delete().eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Removed");
-    load();
+    try {
+      await api.remove("services", id);
+      setList(list.filter((service) => service.id !== id));
+      toast.success("Removed");
+    } catch {
+      toast.error("Unable to remove service");
+    }
   };
 
   return (

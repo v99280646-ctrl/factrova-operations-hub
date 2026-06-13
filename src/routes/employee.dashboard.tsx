@@ -28,8 +28,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/status-badge";
-import { projects, type Project } from "@/lib/data";
+import { type Project, type ProjectStatus } from "@/lib/data";
+import { api } from "@/lib/api";
+import { formatDateTimeCompact } from "@/lib/date-format";
 import { CalendarDays, LogOut, MoreVertical, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/employee/dashboard")({
   head: () => ({ meta: [{ title: "My Projects - Factrova" }] }),
@@ -48,14 +51,76 @@ type ExistingWasteMaterial = {
   size: string;
   available: number;
 };
+type StageMaterial = {
+  projectMaterialId: string;
+  stockItemId?: string | null;
+  materialName: string;
+  materialType: string;
+  requiredQuantity: number;
+  completedQuantity: number;
+  unit: string;
+};
+type ProjectMaterial = {
+  id: string;
+  stockItemId?: string | null;
+  materialName: string;
+  materialType: string;
+  quantity: number;
+  unit: string;
+};
+type WorkflowStage = {
+  id: string;
+  name: string;
+  completed: number;
+  total: number;
+  materials?: StageMaterial[];
+};
+type ApiProject = {
+  id: string;
+  code: string;
+  name: string;
+  customerName: string;
+  status: ProjectStatus;
+  progress: number;
+  delivery?: string | null;
+  amount: number;
+  materials?: ProjectMaterial[];
+  workflowStages?: WorkflowStage[];
+};
+type WorkProject = Project & {
+  backendId: string;
+  materials: ProjectMaterial[];
+  workflowStages: WorkflowStage[];
+};
 
 const materialTypes = ["MDF", "Plywood", "Laminate", "Veneer", "Acrylic", "Edge Band", "Hardware"];
-const existingWasteMaterials: ExistingWasteMaterial[] = [
-  { id: "WM-001", type: "Plywood offcut", size: "18mm - 2 x 3 ft", available: 6 },
-  { id: "WM-002", type: "Veneer strip", size: "4 in x 8 ft", available: 12 },
-  { id: "WM-003", type: "MDF trimming", size: "18mm - mixed", available: 18 },
-  { id: "WM-004", type: "Edge band scrap", size: "Walnut - short rolls", available: 9 },
-];
+const projectStatusOptions = ["Processing", "pending", "Completed"];
+const existingWasteMaterials: ExistingWasteMaterial[] = [];
+
+function roleToStage(role: string) {
+  const name = role.toLowerCase();
+  if (name.includes("press")) return "Pressing";
+  if (name.includes("cut")) return "Cutting";
+  if (name.includes("edge")) return "Edge band";
+  if (name.includes("bor")) return "Boring";
+  if (name.includes("pack") || name.includes("deliver")) return "Packing";
+  return "";
+}
+
+function projectFromApi(row: ApiProject): WorkProject {
+  return {
+    id: row.code,
+    backendId: row.id,
+    name: row.name,
+    customer: row.customerName,
+    status: row.status,
+    progress: row.progress,
+    delivery: row.delivery ?? "TBD",
+    amount: Number(row.amount),
+    materials: row.materials ?? [],
+    workflowStages: row.workflowStages ?? [],
+  };
+}
 
 function emptyWasteMaterial(): WasteMaterial {
   return {
@@ -67,10 +132,15 @@ function emptyWasteMaterial(): WasteMaterial {
 
 function EmployeeDashboard() {
   const navigate = useNavigate();
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [employeeName, setEmployeeName] = useState("Anoop K");
+  const [projects, setProjects] = useState<WorkProject[]>([]);
+  const [allocationProject, setAllocationProject] = useState<WorkProject | null>(null);
+  const [selectedProject, setSelectedProject] = useState<WorkProject | null>(null);
+  const [employeeName, setEmployeeName] = useState("Employee");
   const [employeePosition, setEmployeePosition] = useState("Cutting Mechine");
-  const [completionCount, setCompletionCount] = useState("");
+  const [allocationQuantities, setAllocationQuantities] = useState<Record<string, string>>({});
+  const [usageQuantities, setUsageQuantities] = useState<Record<string, string>>({});
+  const [usageNote, setUsageNote] = useState("");
+  const [projectStatus, setProjectStatus] = useState("Processing");
   const [hasWasteMaterials, setHasWasteMaterials] = useState(false);
   const [wasteMaterialMode, setWasteMaterialMode] = useState<WasteMaterialMode>("create");
   const [wasteMaterials, setWasteMaterials] = useState<WasteMaterial[]>([emptyWasteMaterial()]);
@@ -86,18 +156,135 @@ function EmployeeDashboard() {
 
   useEffect(() => {
     localStorage.setItem("factrova-login-role", "employee");
-    setEmployeeName(localStorage.getItem("factrova-employee-name") || "Anoop K");
+    setEmployeeName(localStorage.getItem("factrova-employee-name") || "Employee");
     setEmployeePosition(localStorage.getItem("factrova-employee-position") || "Cutting Mechine");
+
+    const loadProjects = async () => {
+      try {
+        const rows = await api.list<ApiProject>("projects");
+        setProjects(rows.map(projectFromApi));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to load projects");
+      }
+    };
+
+    loadProjects();
   }, []);
 
-  const openProjectUpdate = (project: Project) => {
-    setSelectedProject(project);
-    setCompletionCount("");
+  const refreshProject = async (project: WorkProject) => {
+    const row = await api.get<ApiProject>("projects", project.backendId);
+    const nextProject = projectFromApi(row);
+    setProjects((items) => items.map((item) => (item.backendId === nextProject.backendId ? nextProject : item)));
+    return nextProject;
+  };
+
+  const openProjectUpdate = async (project: WorkProject) => {
+    const stageName = roleToStage(employeePosition);
+    if (!stageName) {
+      toast.error("This role cannot update project stages");
+      return;
+    }
+    let detail = project;
+    try {
+      detail = await refreshProject(project);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to load project");
+      return;
+    }
+    const stage = detail.workflowStages.find((item) => item.name.toLowerCase() === stageName.toLowerCase());
+    if (!stage) {
+      toast.error(`${stageName} is not available for this project`);
+      return;
+    }
+    if (!stage.materials?.length) {
+      setAllocationProject(detail);
+      setAllocationQuantities(
+        Object.fromEntries(detail.materials.map((material) => [material.id, ""])),
+      );
+      return;
+    }
+    setSelectedProject(detail);
+    setUsageQuantities(
+      Object.fromEntries((stage.materials ?? []).map((material) => [material.projectMaterialId, ""])),
+    );
+    setUsageNote("");
+    setProjectStatus("Processing");
     setHasWasteMaterials(false);
     setWasteMaterialMode("create");
     setWasteMaterials([emptyWasteMaterial()]);
     setWasteMaterialSearch("");
     setSelectedWasteMaterialIds([]);
+  };
+
+  const currentStage = selectedProject
+    ? selectedProject.workflowStages.find(
+        (item) => item.name.toLowerCase() === roleToStage(employeePosition).toLowerCase(),
+      )
+    : null;
+
+  const saveAllocation = async () => {
+    if (!allocationProject) return;
+    const stageName = roleToStage(employeePosition);
+    const materials = allocationProject.materials
+      .map((material) => ({
+        projectMaterialId: material.id,
+        requiredQuantity: Number(allocationQuantities[material.id]) || 0,
+      }))
+      .filter((material) => material.requiredQuantity > 0);
+    if (!materials.length) return toast.error("Enter required quantity for at least one material");
+
+    try {
+      const updated = await api.create<ApiProject>(
+        `projects/${allocationProject.backendId}/stages/${encodeURIComponent(stageName)}/allocation`,
+        { materials },
+      );
+      const nextProject = projectFromApi(updated);
+      setProjects((items) => items.map((item) => (item.backendId === nextProject.backendId ? nextProject : item)));
+      setAllocationProject(null);
+      setSelectedProject(nextProject);
+      const stage = nextProject.workflowStages.find((item) => item.name.toLowerCase() === stageName.toLowerCase());
+      setUsageQuantities(
+        Object.fromEntries((stage?.materials ?? []).map((material) => [material.projectMaterialId, ""])),
+      );
+      toast.success("Stage material requirement saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save stage materials");
+    }
+  };
+
+  const saveUsage = async () => {
+    if (!selectedProject || !currentStage) return;
+    const stageName = roleToStage(employeePosition);
+    const materials = (currentStage.materials ?? [])
+      .map((material) => ({
+        projectMaterialId: material.projectMaterialId,
+        quantityUsed: Number(usageQuantities[material.projectMaterialId]) || 0,
+      }))
+      .filter((material) => material.quantityUsed > 0);
+    if (!materials.length) return toast.error("Enter used quantity for at least one material");
+
+    try {
+      const updated = await api.create<ApiProject>(
+        `projects/${selectedProject.backendId}/stages/${encodeURIComponent(stageName)}/usage`,
+        {
+          role: employeePosition,
+          staffName: employeeName,
+          note: usageNote,
+          materials,
+        },
+      );
+      const nextProject = projectFromApi(updated);
+      setProjects((items) => items.map((item) => (item.backendId === nextProject.backendId ? nextProject : item)));
+      setSelectedProject(nextProject);
+      const stage = nextProject.workflowStages.find((item) => item.name.toLowerCase() === stageName.toLowerCase());
+      setUsageQuantities(
+        Object.fromEntries((stage?.materials ?? []).map((material) => [material.projectMaterialId, ""])),
+      );
+      setUsageNote("");
+      toast.success("Usage updated and stock reduced");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update usage");
+    }
   };
 
   const updateWasteMaterial = (index: number, updates: Partial<WasteMaterial>) => {
@@ -178,11 +365,11 @@ function EmployeeDashboard() {
                 <div className="mt-3 flex items-center justify-between rounded-md bg-muted/45 px-3 py-2 text-xs">
                   <div>
                     <span className="text-muted-foreground">Completion</span>
-                    <span className="ml-2 font-semibold text-foreground">15/25</span>
+                    <span className="ml-2 font-semibold text-foreground">0/0</span>
                   </div>
                   <div className="flex items-center gap-1.5 font-semibold text-foreground">
                       <CalendarDays className="h-3.5 w-3.5" />
-                      {project.delivery}
+                      {formatDateTimeCompact(project.delivery)}
                     </div>
                 </div>
               </button>
@@ -237,7 +424,7 @@ function EmployeeDashboard() {
                             <span className="text-xs text-muted-foreground">{project.progress}%</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">{project.delivery}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{formatDateTimeCompact(project.delivery)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -247,6 +434,70 @@ function EmployeeDashboard() {
           </Card>
         </DashboardLayout>
       </div>
+
+      <Dialog
+        open={!!allocationProject}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAllocationProject(null);
+            setAllocationQuantities({});
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Set {roleToStage(employeePosition)} material requirement</DialogTitle>
+            {allocationProject && (
+              <p className="text-sm font-medium text-muted-foreground">
+                {allocationProject.name}
+              </p>
+            )}
+          </DialogHeader>
+          <div className="space-y-3">
+            {allocationProject?.materials.map((material) => (
+              <div
+                key={material.id}
+                className="grid items-center gap-3 rounded-lg border border-border bg-card p-3 sm:grid-cols-[1fr_140px_90px]"
+              >
+                <div>
+                  <p className="text-sm font-medium">{material.materialName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Project required: {material.quantity} {material.unit}
+                  </p>
+                </div>
+                <Input
+                  type="number"
+                  min={0}
+                  max={material.quantity}
+                  value={allocationQuantities[material.id] ?? ""}
+                  onChange={(event) =>
+                    setAllocationQuantities((current) => ({
+                      ...current,
+                      [material.id]: event.target.value,
+                    }))
+                  }
+                  placeholder="Required"
+                />
+                <span className="text-sm text-muted-foreground">{material.unit}</span>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAllocationProject(null);
+                setAllocationQuantities({});
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={saveAllocation}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!selectedProject} onOpenChange={(open) => !open && setSelectedProject(null)}>
         <DialogContent className="bottom-0 left-0 right-0 top-auto flex max-h-[92dvh] max-w-none !translate-x-0 !translate-y-0 flex-col overflow-hidden rounded-b-none rounded-t-2xl p-0 duration-300 data-[state=closed]:!slide-out-to-bottom data-[state=closed]:!slide-out-to-left-0 data-[state=closed]:!slide-out-to-top-0 data-[state=closed]:!zoom-out-100 data-[state=open]:!slide-in-from-bottom data-[state=open]:!slide-in-from-left-0 data-[state=open]:!slide-in-from-top-0 data-[state=open]:!zoom-in-100 sm:left-[50%] sm:right-auto sm:top-auto sm:max-w-3xl sm:!translate-x-[-50%]">
@@ -259,19 +510,67 @@ function EmployeeDashboard() {
 
           {selectedProject && (
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-5">
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
-                <div className="space-y-1.5">
-                  <Label>Completion Status</Label>
-                  <Input value="0/25" readOnly />
+              <div className="space-y-3">
+                <div className="rounded-lg border border-border bg-muted/30 p-4">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {roleToStage(employeePosition)} progress
+                  </p>
+                  <p className="mt-1 text-xl font-bold">
+                    {currentStage?.completed ?? 0}
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {" "}/ {currentStage?.total ?? 0}
+                    </span>
+                  </p>
                 </div>
+
+                {(currentStage?.materials ?? []).map((material) => {
+                  const remaining = material.requiredQuantity - material.completedQuantity;
+                  return (
+                    <div
+                      key={material.projectMaterialId}
+                      className="grid items-end gap-3 rounded-lg border border-border bg-card p-3 sm:grid-cols-[1fr_120px_80px]"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{material.materialName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {material.completedQuantity}/{material.requiredQuantity} {material.unit} completed
+                        </p>
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-[image:var(--gradient-primary)]"
+                            style={{
+                              width: `${material.requiredQuantity ? Math.min(100, (material.completedQuantity / material.requiredQuantity) * 100) : 0}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Used today</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={remaining}
+                          value={usageQuantities[material.projectMaterialId] ?? ""}
+                          onChange={(event) =>
+                            setUsageQuantities((current) => ({
+                              ...current,
+                              [material.projectMaterialId]: event.target.value,
+                            }))
+                          }
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="pb-2 text-sm text-muted-foreground">{material.unit}</div>
+                    </div>
+                  );
+                })}
+
                 <div className="space-y-1.5">
-                  <Label>Today's Completions</Label>
+                  <Label>Usage note</Label>
                   <Input
-                    type="number"
-                    min={0}
-                    value={completionCount}
-                    onChange={(event) => setCompletionCount(event.target.value)}
-                    placeholder="Enter count"
+                    value={usageNote}
+                    onChange={(event) => setUsageNote(event.target.value)}
+                    placeholder="Optional note"
                   />
                 </div>
               </div>
@@ -397,12 +696,28 @@ function EmployeeDashboard() {
                   </Tabs>
                 )}
               </div>
+
+              <div className="space-y-1.5">
+                <Label>Project Status</Label>
+                <Select value={projectStatus} onValueChange={setProjectStatus}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projectStatusOptions.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
 
           <DialogFooter className="sticky bottom-0 grid shrink-0 grid-cols-2 gap-3 border-t border-border bg-background px-6 py-4 sm:grid-cols-2">
             <Button variant="outline" onClick={() => setSelectedProject(null)}>Cancel</Button>
-            <Button onClick={() => setSelectedProject(null)}>Save</Button>
+            <Button onClick={saveUsage}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

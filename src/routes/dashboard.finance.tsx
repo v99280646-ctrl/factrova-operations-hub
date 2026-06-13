@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,8 +26,17 @@ import {
   Trash2,
   Wallet,
 } from "lucide-react";
-import { projects, transactions, revenueByMonth } from "@/lib/data";
+import {
+  projects as initialProjects,
+  transactions as initialTransactions,
+  revenueByMonth as initialRevenueByMonth,
+  type Project,
+  type ProjectStatus,
+} from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { api } from "@/lib/api";
+import { formatDateTimeCompact } from "@/lib/date-format";
 
 export const Route = createFileRoute("/dashboard/finance")({
   head: () => ({ meta: [{ title: "Accounts & Finance - Factrova" }] }),
@@ -55,25 +64,79 @@ type InvoiceForm = {
 
 const defaultInvoice: InvoiceForm = {
   design: "standard",
-  invoiceNo: "INV-NEW-001",
-  date: "2026-05-18",
-  billToAddress: "18 Residency Road\nBengaluru, Karnataka 560025",
+  invoiceNo: "",
+  date: "",
+  billToAddress: "",
   logoDataUrl: "",
   logoName: "",
-  items: [
-    {
-      name: "Modular furniture work",
-      quantity: 1,
-      price: 25000,
-      tax: 18,
-    },
-  ],
+  items: [],
 };
 
 function Finance() {
   const [invoiceOpen, setInvoiceOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [invoice, setInvoice] = useState<InvoiceForm>(defaultInvoice);
+  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [transactions, setTransactions] = useState(initialTransactions);
+  const [revenueByMonth, setRevenueByMonth] = useState(initialRevenueByMonth);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [projectRows, transactionRows] = await Promise.all([
+          api.list<{
+            id: string;
+            code: string;
+            name: string;
+            customerName: string;
+            status: ProjectStatus;
+            progress: number;
+            delivery?: string | null;
+            amount: number;
+          }>("projects"),
+          api.list<{
+            id: string;
+            transactionDate: string;
+            description: string;
+            type: "credit" | "debit";
+            amount: number;
+          }>("transactions"),
+        ]);
+        setProjects(
+          (projectRows ?? []).map((row) => ({
+            id: row.code,
+            name: row.name,
+            customer: row.customerName,
+            status: row.status as ProjectStatus,
+            progress: row.progress,
+            delivery: row.delivery ?? "TBD",
+            amount: Number(row.amount),
+          })),
+        );
+        const rows = (transactionRows ?? []).map((row) => ({
+          id: row.id,
+          date: row.transactionDate,
+          desc: row.description,
+          type: row.type as "credit" | "debit",
+          amount: Number(row.amount),
+        }));
+        setTransactions(rows);
+        const monthTotals = rows
+          .filter((row) => row.type === "credit")
+          .reduce<Record<string, number>>((totals, row) => {
+            const month = new Intl.DateTimeFormat("en", { month: "short" }).format(new Date(row.date));
+            totals[month] = (totals[month] ?? 0) + row.amount;
+            return totals;
+          }, {});
+        if (Object.keys(monthTotals).length) {
+          setRevenueByMonth(Object.entries(monthTotals).map(([month, revenue]) => ({ month, revenue })));
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to load finance data");
+      }
+    };
+    load();
+  }, []);
 
   const invoices = projects.map((p, index) => ({
     id: `INV-${String(index + 1).padStart(3, "0")}`,
@@ -232,7 +295,7 @@ function Finance() {
                         className="cursor-pointer border-b border-border/50 outline-none last:border-0 hover:bg-muted/30 focus:bg-muted/40"
                       >
                         <td className="px-4 py-3 font-medium">{row.id}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{row.date}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{formatDateTimeCompact(row.date)}</td>
                         <td className="px-4 py-3">{row.customer}</td>
                         <td className="px-4 py-3 text-muted-foreground">{row.project}</td>
                         <td className="px-4 py-3">
@@ -277,7 +340,7 @@ function Finance() {
                   <tbody>
                     {transactions.map((t) => (
                       <tr key={t.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
-                        <td className="px-4 py-3 text-muted-foreground">{t.date}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{formatDateTimeCompact(t.date)}</td>
                         <td className="px-4 py-3 font-medium">{t.desc}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium capitalize ${
@@ -553,7 +616,9 @@ function InvoicePreview({ invoice }: { invoice: InvoiceForm }) {
         <div className="text-right">
           <p className="text-xs uppercase tracking-wide">Invoice</p>
           <p className="mt-1 font-semibold">{invoice.invoiceNo}</p>
-          <p className={cn("text-sm", invoice.design === "professional" ? "text-slate-300" : "text-slate-500")}>{invoice.date}</p>
+          <p className={cn("text-sm", invoice.design === "professional" ? "text-slate-300" : "text-slate-500")}>
+            {formatDateTimeCompact(invoice.date)}
+          </p>
         </div>
       </div>
 
@@ -685,7 +750,7 @@ function invoiceDocument(invoice: InvoiceForm) {
   <div class="invoice">
     <div class="header">
       <div>${logo}<h1>Factrova</h1><p class="muted">Factory Operations Hub</p></div>
-      <div style="text-align:right"><p>INVOICE</p><strong>${escapeHtml(invoice.invoiceNo)}</strong><p>${escapeHtml(invoice.date)}</p></div>
+      <div style="text-align:right"><p>INVOICE</p><strong>${escapeHtml(invoice.invoiceNo)}</strong><p>${escapeHtml(formatDateTimeCompact(invoice.date))}</p></div>
     </div>
     <p class="muted">Address</p>
     <div class="muted bill-to">${billToAddress}</div>

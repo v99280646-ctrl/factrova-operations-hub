@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ChevronDown, Plus, Search, Pencil, Trash2 } from "lucide-react";
-import { customers as initial, type Customer } from "@/lib/data";
+import { type Customer } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { api } from "@/lib/api";
 
 export const Route = createFileRoute("/dashboard/customers")({
   head: () => ({ meta: [{ title: "Customers — Factrova" }] }),
@@ -23,7 +25,7 @@ export const Route = createFileRoute("/dashboard/customers")({
 });
 
 function Customers() {
-  const [list, setList] = useState<Customer[]>(initial);
+  const [list, setList] = useState<Customer[]>([]);
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -46,11 +48,51 @@ function Customers() {
     [c.company, c.contact, c.phone, c.email].join(" ").toLowerCase().includes(q.toLowerCase()),
   );
 
-  const save = () => {
+  const load = async () => {
+    try {
+      const data = await api.list<Customer>("customers");
+      setList(data ?? []);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to load customers");
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const save = async () => {
+    if (!form.company.trim()) return toast.error("Company name required");
+    const payload = {
+      company: form.company.trim(),
+      contact: form.contact.trim() || null,
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      address: form.address.trim() || null,
+      state: form.state?.trim() || null,
+      district: form.district?.trim() || null,
+      pincode: form.pincode?.trim() || null,
+      gstin: form.gstin?.trim() || null,
+    };
+
     if (editing) {
-      setList((l) => l.map((c) => (c.id === editing.id ? { ...form, id: editing.id } : c)));
+      const nextList = list.map((c) => (c.id === editing.id ? { ...form, id: editing.id } : c));
+      try {
+        await api.update<Customer>("customers", editing.id, payload);
+        setList(nextList);
+        toast.success("Customer updated");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to save customer");
+      }
     } else {
-      setList((l) => [...l, { ...form, id: `C${String(l.length + 1).padStart(3, "0")}` }]);
+      try {
+        const data = await api.create<Customer>("customers", payload);
+        const nextList = [data, ...list];
+        setList(nextList);
+        toast.success("Customer added");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to save customer");
+      }
     }
     setOpen(false);
     setEditing(null);
@@ -138,7 +180,19 @@ function Customers() {
                         <Button size="icon" variant="ghost" onClick={() => { setEditing(c); setForm({ ...blank, ...c }); setAdvancedOpen(false); setOpen(true); }}>
                           <Pencil className="h-4 w-4" />
                         </Button>
-                        <Button size="icon" variant="ghost" onClick={() => setList((l) => l.filter((x) => x.id !== c.id))}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={async () => {
+                            try {
+                              await api.remove("customers", c.id);
+                              setList(list.filter((x) => x.id !== c.id));
+                              toast.success("Customer removed");
+                            } catch (error) {
+                              toast.error(error instanceof Error ? error.message : "Unable to remove customer");
+                            }
+                          }}
+                        >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>
