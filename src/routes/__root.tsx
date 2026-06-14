@@ -37,6 +37,10 @@ export const Route = createRootRoute({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Factrova — Factory Operations" },
+      { name: "twitter:description", content: "Manage projects, customers, vendors, stock, and finance — all in one elegant workspace." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6c0e1ea2-cbac-49dd-b1dc-e75139fa99d3/id-preview-348a6662--6ebf650d-c543-4065-a391-bcf19f43b730.lovable.app-1781364984113.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6c0e1ea2-cbac-49dd-b1dc-e75139fa99d3/id-preview-348a6662--6ebf650d-c543-4065-a391-bcf19f43b730.lovable.app-1781364984113.png" },
     ],
     links: [
       {
